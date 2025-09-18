@@ -19,13 +19,13 @@ column_constraint ::=
 	( PRIMARY KEY [ AUTOINCREMENT ] | NOT NULL 
 
 insert_stmt ::=
-	INSERT INTO table_name [ '(' column_name ( ',' column_name ) * ')' ] ( values ) * 
+	INSERT INTO table_name [ '(' column_name ( ',' column_name ) * ')' ]  [ VALUES ( values ) * ]
 
 column_name ::=
 	column_name
 
 values ::= 
-	VALUES '(' expr ( ',' expr ) * ')'
+	'(' expr ( ',' expr ) * ')'
 
 expr ::=
 	digit | string
@@ -33,6 +33,11 @@ expr ::=
 digit ::= 
 	int_digit | float_digit
 
-int_digit ::= [0-9] [0-9]*
-float_digit ::= [0-9] [0-9]* '.' [0-9] [0-9]*
-string ::= '"' .* '"'
+string 
+	::= '"' .* '"'
+
+int_digit
+	::= [0-9] [0-9]*
+
+float_digit 
+	::= [0-9] [0-9]* '.' [0-9] [0-9]*
