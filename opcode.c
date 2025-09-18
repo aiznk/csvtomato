@@ -26,11 +26,10 @@ destroy_elem(CsvTomatoOpcodeElem *elem) {
 	switch (elem->kind) {
 	case CSVTMT_OP_NONE:
 		break;
-	case CSVTMT_OP_CREATE_TABLE:
+	case CSVTMT_OP_CREATE_TABLE_BEG:
 		free(elem->obj.create_table_stmt.table_name);
 		break;
-	case CSVTMT_OP_CREATE_TABLE_IF_NOT_EXISTS:
-		free(elem->obj.create_table_stmt.table_name);
+	case CSVTMT_OP_CREATE_TABLE_END:
 		break;
 	case CSVTMT_OP_COLUMN_DEF:
 		free(elem->obj.column_def.column_name);
@@ -117,6 +116,21 @@ opcode_create_table_stmt(
 	CsvTomatoError *error
 ) {
 	assert(node);
+
+	{
+		CsvTomatoOpcodeElem elem = {0};
+
+		elem.kind = CSVTMT_OP_CREATE_TABLE_BEG;
+		elem.obj.create_table_stmt.if_not_exists = node->obj.create_table_stmt.if_not_exists;
+		elem.obj.create_table_stmt.table_name = csvtmt_move(node->obj.create_table_stmt.table_name);
+		node->obj.create_table_stmt.table_name = NULL;
+
+		push(self, elem, error);
+		if (error->error) {
+			return;
+		}
+	}
+
 	CsvTomatoNode *cur = node->obj.create_table_stmt.column_defs;
 	for (; cur; cur = cur->next) {
 		opcode_column_def(self, cur, error);
@@ -125,21 +139,15 @@ opcode_create_table_stmt(
 		}
 	}
 
-	CsvTomatoOpcodeKind kind;
-	if (node->obj.create_table_stmt.if_not_exists) {
-		kind = CSVTMT_OP_CREATE_TABLE_IF_NOT_EXISTS;
-	} else {
-		kind = CSVTMT_OP_CREATE_TABLE;
-	}
+	{
+		CsvTomatoOpcodeElem elem = {0};
 
-	CsvTomatoOpcodeElem elem = {0};
-	elem.kind = kind;
-	elem.obj.create_table_stmt.table_name = csvtmt_move(node->obj.create_table_stmt.table_name);
-	node->obj.create_table_stmt.table_name = NULL;
+		elem.kind = CSVTMT_OP_CREATE_TABLE_END;
 
-	push(self, elem, error);
-	if (error->error) {
-		return;
+		push(self, elem, error);
+		if (error->error) {
+			return;
+		}
 	}
 }
 
