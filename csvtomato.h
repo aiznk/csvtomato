@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <ctype.h>
 #include <sys/types.h>
+#include <assert.h>
 
 /************
 * constants *
@@ -70,12 +71,20 @@ typedef enum {
 	CSVTMT_ND_COLUMN_CONSTRAINT,
 } CsvTomatoNodeKind;
 
+typedef enum {
+	CSVTMT_OP_NONE,
+	CSVTMT_OP_CREATE_TABLE,
+	CSVTMT_OP_CREATE_TABLE_IF_NOT_EXISTS,
+	CSVTMT_OP_COLUMN_DEF,
+} CsvTomatoOpcodeKind;
+
 /*********
 * macros *
 *********/
 
 #define CSVTMT_TRANSTENT csvtmt_free
 #define CSVTMT_STATIC csvtmt_static
+#define csvtmt_move(o) o
 
 /********
 * types *
@@ -101,6 +110,15 @@ typedef struct CsvTomatoNode CsvTomatoNode;
 
 struct CsvTomatoParser;
 typedef struct CsvTomatoParser CsvTomatoParser;
+
+struct CsvTomatoOpcodeElem;
+typedef struct CsvTomatoOpcodeElem CsvTomatoOpcodeElem;
+
+struct CsvTomatoOpcode;
+typedef struct CsvTomatoOpcode CsvTomatoOpcode;
+
+struct CsvTomatoExecutor;
+typedef struct CsvTomatoExecutor CsvTomatoExecutor;
 
 /**********
 * structs *
@@ -147,6 +165,7 @@ struct CsvTomatoNode {
 		struct {
 			char *table_name;
 			struct CsvTomatoNode *column_defs;
+			bool if_not_exists;
 		} create_table_stmt;
 		struct {
 			char *column_name;
@@ -165,6 +184,34 @@ struct CsvTomatoNode {
 
 struct CsvTomatoParser {
 	CsvTomatoNode *root_node;
+};
+
+struct CsvTomatoOpcode {
+	CsvTomatoOpcodeElem *elems;
+	size_t capa;
+	size_t len;
+};
+
+struct CsvTomatoOpcodeElem {
+	CsvTomatoOpcodeKind kind;
+	union {
+		struct {
+			char *table_name;
+		} create_table_stmt;
+		struct {
+			char *column_name;
+			CsvTomatoTokenKind type_name;
+			bool primary;
+			bool key;
+			bool autoincrement;
+			bool not_;
+			bool null;		
+		} column_def;
+	} obj;
+};
+
+struct CsvTomatoExecutor {
+	int a;
 };
 
 /*************
@@ -287,5 +334,29 @@ CsvTomatoNode *
 csvtmt_parser_parse(
 	CsvTomatoParser *self,
 	CsvTomatoToken *token,
+	CsvTomatoError *error
+);
+
+// opcode.c
+
+CsvTomatoOpcode *
+csvtmt_opcode_new(CsvTomatoError *error);
+
+void
+csvtmt_opcode_del(CsvTomatoOpcode *self);
+
+void
+csvtmt_opcode_parse(
+	CsvTomatoOpcode *self,
+	CsvTomatoNode *node,
+	CsvTomatoError *error
+);
+
+// executor.c
+
+void
+csvtmt_executor_exec(
+	CsvTomatoExecutor *self,
+	CsvTomatoOpcodeElem *opcodes,
 	CsvTomatoError *error
 );
