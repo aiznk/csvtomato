@@ -8,9 +8,7 @@ csvtmt_token_new(
 	errno = 0;
 	CsvTomatoToken *self = calloc(1, sizeof(*self));
 	if (!self) {
-		error->error = true;
-		error->kind = CSVTMT_ERR_MEM;
-		snprintf(error->message, sizeof error->message, "failed to allocate memory: %s", strerror(errno));
+		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
 		return NULL;		
 	}
 
@@ -28,14 +26,25 @@ csvtmt_token_del(CsvTomatoToken *self) {
 	free(self);
 }
 
+void
+csvtmt_token_del_all(CsvTomatoToken *self) {
+	if (!self) {
+		return;
+	}
+
+	for (CsvTomatoToken *cur = self; cur; ) {
+		CsvTomatoToken *rm = cur;
+		cur = cur->next;
+		csvtmt_token_del(rm);
+	}
+}
+
 CsvTomatoTokenizer *
 csvtmt_tokenizer_new(CsvTomatoError *error) {
 	errno = 0;
 	CsvTomatoTokenizer *self = calloc(1, sizeof(CsvTomatoTokenizer));
 	if (!self) {
-		error->error = true;
-		error->kind = CSVTMT_ERR_MEM;
-		snprintf(error->message, sizeof error->message, "failed to allocate memory: %s", strerror(errno));
+		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
 		return NULL;
 	}
 
@@ -48,27 +57,20 @@ csvtmt_tokenizer_del(CsvTomatoTokenizer *self) {
 		return;
 	}
 
-	for (CsvTomatoToken *cur = self->root_token; cur; ) {
-		CsvTomatoToken *rm = cur;
-		cur = cur->next;
-		csvtmt_token_del(rm);
-	}
-
 	free(self);
 }
 
 static CsvTomatoToken *
 tokenize_ident(CsvTomatoTokenizer *self, CsvTomatoError *error) {
 	CsvTomatoToken *tok = csvtmt_token_new(CSVTMT_TK_IDENT, error);
-	if (error.error) {
+	if (error->error) {
 		return NULL;
 	}
 
+	#undef push
 	#define push(c) {\
 		if (tok->len >= CSVTMT_STR_SIZE) {\
-			error->error = true;\
-			error->kind = CSVTMT_ERR_BUF_OVERFLOW;\
-			snprintf(error->message, sizeof error->message, "token buffer overflow");\
+			csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "token buffer overflow (1)");\
 			return NULL;\
 		}\
 		tok->text[tok->len++] = c;\
@@ -112,15 +114,14 @@ tokenize_string(
 	char quote
 ) {
 	CsvTomatoToken *tok = csvtmt_token_new(CSVTMT_TK_STRING, error);
-	if (error.error) {
+	if (error->error) {
 		return NULL;
 	}
 
+	#undef push
 	#define push(c) {\
 		if (tok->len >= CSVTMT_STR_SIZE) {\
-			error->error = true;\
-			error->kind = CSVTMT_ERR_BUF_OVERFLOW;\
-			snprintf(error->message, sizeof error->message, "token buffer overflow (2)");\
+			csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "token buffer overflow (2)");\
 			return NULL;\
 		}\
 		tok->text[tok->len++] = c;\
@@ -153,15 +154,14 @@ tokenize_digit(
 	CsvTomatoError *error
 ) {
 	CsvTomatoToken *tok = csvtmt_token_new(CSVTMT_TK_INT, error);
-	if (error.error) {
+	if (error->error) {
 		return NULL;
 	}
 
+	#undef push
 	#define push(c) {\
 		if (tok->len >= CSVTMT_STR_SIZE) {\
-			error->error = true;\
-			error->kind = CSVTMT_ERR_BUF_OVERFLOW;\
-			snprintf(error->message, sizeof error->message, "token buffer overflow (3)");\
+			csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "token buffer overflow (3)");\
 			return NULL;\
 		}\
 		tok->text[tok->len++] = c;\
@@ -185,7 +185,7 @@ tokenize_digit(
 	return tok;
 }
 
-void
+CsvTomatoToken *
 csvtmt_tokenizer_tokenize(
 	CsvTomatoTokenizer *self,
 	const char *code,
@@ -196,18 +196,18 @@ csvtmt_tokenizer_tokenize(
 	self->code = code;
 
 	CsvTomatoToken *tok = csvtmt_token_new(CSVTMT_TK_ROOT, error);
-	if (error.error) {
-		return;
+	if (error->error) {
+		return NULL;
 	}
 
-	self->root_token = tok;
+	CsvTomatoToken *root = tok;
 
 	#define store(kind) {\
 		tok->next = csvtmt_token_new(kind, error);\
 		if (error->error) {\
 			goto fail;\
 		}\
-		tok = tok->next\
+		tok = tok->next;\
 	}\
 
 	for (; self->index < self->len; self->index++) {
@@ -241,15 +241,17 @@ csvtmt_tokenizer_tokenize(
 			store(CSVTMT_TK_BEG_PAREN);
 		} else if (c1 == ')') {
 			store(CSVTMT_TK_END_PAREN);
+		} else if (c1 == '?') {
+			store(CSVTMT_TK_PLACE_HOLDER);
+		} else if (c1 == ',') {
+			store(CSVTMT_TK_COMMA);
 		} else {
-			error->error = true;
-			error->kind = CSVTMT_ERR_TOKENIZE;
-			snprintf(error->message, sizeof error->message, "not supported character '%c' on tokenize", c1);
+			csvtmt_error_format(error, CSVTMT_ERR_TOKENIZE, "not supported character '%c' on tokenize", c1);
 			goto fail;
 		}
 	}
 
-	return;
+	return root;
 fail:
-	csvtmt_token_del(tok);
+	return NULL;
 }
