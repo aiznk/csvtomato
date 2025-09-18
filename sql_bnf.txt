@@ -1,0 +1,19 @@
+SQL BNF
+
+sql_stmt_list ::= 
+	[ sql_stmt ] ( ';' [ sql_stmt ] ) *
+
+sql_stmt ::= 
+	create_table_stmt 
+
+create_table_stmt ::= 
+	CREATE TABLE [ IF NOT EXISTS ] table_name ( '(' column_def ( ',' column_def ) * ')' 
+
+column_def ::= 
+	column_name [ type_name ] ( column_constraint ) *
+
+type_name ::= 
+	INTEGER | TEXT
+
+column_constraint ::= 
+	( PRIMARY KEY [ AUTOINCREMENT ] | NOT NULL 
