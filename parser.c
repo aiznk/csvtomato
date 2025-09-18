@@ -53,6 +53,25 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 			csvtmt_node_del_all(rm);
 		}
 		break;
+	case CSVTMT_ND_INSERT_STMT:
+		for (CsvTomatoNode *cur = self->obj.insert_stmt.column_names; cur; ) {
+			csvtmt_node_del_all(cur);
+		}
+		for (CsvTomatoNode *cur = self->obj.insert_stmt.values; cur; ) {
+			csvtmt_node_del_all(cur);
+		}
+		break;
+	case CSVTMT_ND_VALUES:
+		for (CsvTomatoNode *cur = self->obj.values.exprs; cur; ) {
+			csvtmt_node_del_all(cur);
+		}		
+		break;
+	case CSVTMT_ND_EXPR:
+		free(self->obj.expr.string);
+		break;
+	case CSVTMT_ND_COLUMN_NAME:
+		free(self->obj.column_name.column_name);
+		break;
 	case CSVTMT_ND_COLUMN_DEF:
 		// puts("CSVTMT_ND_COLUMN_DEF");
 		free(self->obj.column_def.column_name);

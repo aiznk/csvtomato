@@ -1,15 +1,30 @@
 #pragma once
 
+#include "stringtmpl.h"
+DECL_STRING(CsvTomatoString, csvtmt_str, char)
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <string.h>
 #include <strings.h>
 #include <errno.h>
 #include <ctype.h>
 #include <sys/types.h>
 #include <assert.h>
+
+#ifdef _WIN32
+    #include <windows.h>
+    #include <direct.h>
+    #define CSVTMT_MKDIR(path) _mkdir(path)
+#else
+    #include <sys/stat.h>
+    #include <sys/types.h>
+    #include <unistd.h>
+    #define CSVTMT_MKDIR(path) mkdir(path, 0755)
+#endif
 
 /************
 * constants *
@@ -19,6 +34,7 @@ enum {
 	CSVTMT_ERR_MSG_SIZE = 256,
 	CSVTMT_STR_SIZE = 256,
 	CSVTMT_IDENT_SIZE = 256,
+	CSVTMT_PATH_SIZE = 256,
 };
 
 typedef enum {
@@ -27,6 +43,8 @@ typedef enum {
 	CSVTMT_ERR_BUF_OVERFLOW,
 	CSVTMT_ERR_TOKENIZE,
 	CSVTMT_ERR_SYNTAX,
+	CSVTMT_ERR_EXEC,
+	CSVTMT_ERR_FILE_IO,
 } CsvTomatoErrorKind;
 
 typedef enum {
@@ -67,14 +85,18 @@ typedef enum {
 	CSVTMT_ND_STMT_LIST,
 	CSVTMT_ND_STMT,
 	CSVTMT_ND_CREATE_TABLE_STMT,
+	CSVTMT_ND_INSERT_STMT,
+	CSVTMT_ND_VALUES,
+	CSVTMT_ND_EXPR,
+	CSVTMT_ND_COLUMN_NAME,
 	CSVTMT_ND_COLUMN_DEF,
 	CSVTMT_ND_COLUMN_CONSTRAINT,
 } CsvTomatoNodeKind;
 
 typedef enum {
 	CSVTMT_OP_NONE,
-	CSVTMT_OP_CREATE_TABLE,
-	CSVTMT_OP_CREATE_TABLE_IF_NOT_EXISTS,
+	CSVTMT_OP_CREATE_TABLE_BEG,
+	CSVTMT_OP_CREATE_TABLE_END,
 	CSVTMT_OP_COLUMN_DEF,
 } CsvTomatoOpcodeKind;
 
@@ -120,6 +142,9 @@ typedef struct CsvTomatoOpcode CsvTomatoOpcode;
 struct CsvTomatoExecutor;
 typedef struct CsvTomatoExecutor CsvTomatoExecutor;
 
+struct CsvTomatoStringList;
+typedef struct CsvTomatoStringList CsvTomatoStringList;
+
 /**********
 * structs *
 **********/
@@ -152,6 +177,11 @@ struct CsvTomatoTokenizer {
 	const char *code;
 };
 
+struct CsvTomatoStringList {
+	char *str;
+	struct CsvTomatoStringList *next;
+};
+
 struct CsvTomatoNode {
 	CsvTomatoNodeKind kind;
 	struct CsvTomatoNode *next;
@@ -161,12 +191,32 @@ struct CsvTomatoNode {
 		} sql_stmt_list;
 		struct {
 			struct CsvTomatoNode *create_table_stmt;
+			struct CsvTomatoNode *insert_stmt;
 		} sql_stmt;
 		struct {
 			char *table_name;
 			struct CsvTomatoNode *column_defs;
 			bool if_not_exists;
 		} create_table_stmt;
+		struct {
+			char *table_name;
+			struct CsvTomatoNode *column_names;
+			struct CsvTomatoNode *values;
+		} insert_stmt;
+		struct {
+			char *column_name;
+		} column_name;
+		struct {
+			struct CsvTomatoNode *exprs;
+		} values;
+		struct {
+			struct CsvTomatoNode *digit;
+			char *string;
+		} expr;
+		struct {
+			int64_t int_digit;
+			double float_digit;
+		} digit;
 		struct {
 			char *column_name;
 			CsvTomatoTokenKind type_name;
@@ -197,6 +247,7 @@ struct CsvTomatoOpcodeElem {
 	union {
 		struct {
 			char *table_name;
+			bool if_not_exists;
 		} create_table_stmt;
 		struct {
 			char *column_name;
@@ -211,7 +262,7 @@ struct CsvTomatoOpcodeElem {
 };
 
 struct CsvTomatoExecutor {
-	int a;
+	char db_dir[CSVTMT_PATH_SIZE];
 };
 
 /*************
@@ -354,9 +405,40 @@ csvtmt_opcode_parse(
 
 // executor.c
 
+CsvTomatoExecutor *
+csvtmt_executor_new(const char *db_dir, CsvTomatoError *error);
+
+void
+csvtmt_executor_del(CsvTomatoExecutor *self);
+
 void
 csvtmt_executor_exec(
 	CsvTomatoExecutor *self,
-	CsvTomatoOpcodeElem *opcodes,
+	const CsvTomatoOpcodeElem *opcodes,
+	size_t opcodes_len,
 	CsvTomatoError *error
 );
+
+// file.c
+
+int
+csvtmt_file_exists(const char *path);
+
+int
+csvtmt_file_mkdir(const char *path);
+
+// stringlist.c 
+
+CsvTomatoStringList *
+csvtmt_strlist_new(CsvTomatoError *error);
+
+void
+csvtmt_strlist_del(CsvTomatoStringList *self);
+
+void
+csvtmt_strlist_move_back_str(
+	CsvTomatoStringList *self, 
+	char *move_str,
+	CsvTomatoError *error
+);
+
