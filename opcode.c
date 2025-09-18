@@ -94,7 +94,7 @@ csvtmt_opcode_parse(
 static void
 opcode_sql_stmt_list(CsvTomatoOpcode *self, CsvTomatoNode *node, CsvTomatoError *error) {
 	assert(node);
-	CsvTomatoNode *cur = node->obj.sql_stmt_list.sql_stmts;
+	CsvTomatoNode *cur = node->obj.sql_stmt_list.sql_stmt_list;
 	for (; cur; cur = cur->next) {
 		opcode_sql_stmt(self, cur, error);
 		if (error->error) {
@@ -107,6 +107,7 @@ static void
 opcode_sql_stmt(CsvTomatoOpcode *self, CsvTomatoNode *node, CsvTomatoError *error) {
 	assert(node);
 	opcode_create_table_stmt(self, node->obj.sql_stmt.create_table_stmt, error);
+	opcode_insert_stmt(self, node->obj.sql_stmt.insert_stmt, error);
 }
 
 static void
@@ -131,7 +132,7 @@ opcode_create_table_stmt(
 		}
 	}
 
-	CsvTomatoNode *cur = node->obj.create_table_stmt.column_defs;
+	CsvTomatoNode *cur = node->obj.create_table_stmt.column_def_list;
 	for (; cur; cur = cur->next) {
 		opcode_column_def(self, cur, error);
 		if (error->error) {
@@ -143,6 +144,28 @@ opcode_create_table_stmt(
 		CsvTomatoOpcodeElem elem = {0};
 
 		elem.kind = CSVTMT_OP_CREATE_TABLE_END;
+
+		push(self, elem, error);
+		if (error->error) {
+			return;
+		}
+	}
+}
+
+static void
+opcode_insert_stmt(
+	CsvTomatoOpcode *self, 
+	CsvTomatoNode *node, 
+	CsvTomatoError *error
+) {
+	assert(node);
+
+	{
+		CsvTomatoOpcodeElem elem = {0};
+
+		elem.kind = CSVTMT_OP_CREATE_TABLE_BEG;
+		elem.obj.insert_stmt.table_name = csvtmt_move(node->obj.insert_stmt.table_name);
+		node->obj.insert_stmt.table_name = NULL;
 
 		push(self, elem, error);
 		if (error->error) {

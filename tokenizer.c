@@ -129,6 +129,8 @@ tokenize_string(
 		tok->text[tok->len] = 0;\
 	}\
 
+	self->index++; // quote
+
 	for (; self->index < self->len; self->index++) {
 		char c1 = self->code[self->index];
 
@@ -181,6 +183,12 @@ tokenize_digit(
 			self->index--;
 			break;
 		}
+	}
+
+	if (tok->kind == CSVTMT_TK_INT) {
+		tok->int_digit = atoi(tok->text);
+	} else {
+		tok->float_digit = atof(tok->text);
 	}
 
 	return tok;

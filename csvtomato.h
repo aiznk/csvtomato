@@ -88,6 +88,8 @@ typedef enum {
 	CSVTMT_ND_INSERT_STMT,
 	CSVTMT_ND_VALUES,
 	CSVTMT_ND_EXPR,
+	CSVTMT_ND_DIGIT,
+	CSVTMT_ND_STRING,
 	CSVTMT_ND_COLUMN_NAME,
 	CSVTMT_ND_COLUMN_DEF,
 	CSVTMT_ND_COLUMN_CONSTRAINT,
@@ -97,6 +99,8 @@ typedef enum {
 	CSVTMT_OP_NONE,
 	CSVTMT_OP_CREATE_TABLE_BEG,
 	CSVTMT_OP_CREATE_TABLE_END,
+	CSVTMT_OP_INSERT_INTO_BEG,
+	CSVTMT_OP_INSERT_INTO_END,
 	CSVTMT_OP_COLUMN_DEF,
 } CsvTomatoOpcodeKind;
 
@@ -167,6 +171,8 @@ struct CsvTomatoToken {
 	CsvTomatoTokenKind kind;
 	char text[CSVTMT_STR_SIZE];
 	size_t len;
+	int64_t int_digit;
+	double float_digit;
 	struct CsvTomatoToken *next;
 };
 
@@ -187,7 +193,7 @@ struct CsvTomatoNode {
 	struct CsvTomatoNode *next;
 	union {
 		struct {
-			struct CsvTomatoNode *sql_stmts;
+			struct CsvTomatoNode *sql_stmt_list;
 		} sql_stmt_list;
 		struct {
 			struct CsvTomatoNode *create_table_stmt;
@@ -195,28 +201,31 @@ struct CsvTomatoNode {
 		} sql_stmt;
 		struct {
 			char *table_name;
-			struct CsvTomatoNode *column_defs;
+			struct CsvTomatoNode *column_def_list;
 			bool if_not_exists;
 		} create_table_stmt;
 		struct {
 			char *table_name;
-			struct CsvTomatoNode *column_names;
-			struct CsvTomatoNode *values;
+			struct CsvTomatoNode *column_name_list;
+			struct CsvTomatoNode *values_list;
 		} insert_stmt;
 		struct {
 			char *column_name;
 		} column_name;
 		struct {
-			struct CsvTomatoNode *exprs;
+			struct CsvTomatoNode *expr_list;
 		} values;
 		struct {
 			struct CsvTomatoNode *digit;
-			char *string;
+			struct CsvTomatoNode *string;
 		} expr;
 		struct {
 			int64_t int_digit;
 			double float_digit;
 		} digit;
+		struct {
+			char *string;
+		} string;
 		struct {
 			char *column_name;
 			CsvTomatoTokenKind type_name;
@@ -249,6 +258,11 @@ struct CsvTomatoOpcodeElem {
 			char *table_name;
 			bool if_not_exists;
 		} create_table_stmt;
+		struct {
+			char *table_name;
+			CsvTomatoStringList *column_name_list;
+			CsvTomatoValuesList *values;TODO
+		} insert_stmt;
 		struct {
 			char *column_name;
 			CsvTomatoTokenKind type_name;

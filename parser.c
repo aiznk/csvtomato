@@ -34,7 +34,7 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 		break;
 	case CSVTMT_ND_STMT_LIST:
 		// puts("CSVTMT_ND_STMT_LIST");
-		for (CsvTomatoNode *cur = self->obj.sql_stmt_list.sql_stmts; cur; ) {
+		for (CsvTomatoNode *cur = self->obj.sql_stmt_list.sql_stmt_list; cur; ) {
 			CsvTomatoNode *rm = cur;
 			cur = cur->next;
 			csvtmt_node_del_all(rm);
@@ -43,31 +43,40 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 	case CSVTMT_ND_STMT:
 		// puts("CSVTMT_ND_STMT");
 		csvtmt_node_del_all(self->obj.sql_stmt.create_table_stmt);
+		csvtmt_node_del_all(self->obj.sql_stmt.insert_stmt);
 		break;
 	case CSVTMT_ND_CREATE_TABLE_STMT:
 		// puts("CSVTMT_ND_CREATE_TABLE_STMT");
 		free(self->obj.create_table_stmt.table_name);
-		for (CsvTomatoNode *cur = self->obj.create_table_stmt.column_defs; cur; ) {
+		for (CsvTomatoNode *cur = self->obj.create_table_stmt.column_def_list; cur; ) {
 			CsvTomatoNode *rm = cur;
 			cur = cur->next;
 			csvtmt_node_del_all(rm);
 		}
 		break;
 	case CSVTMT_ND_INSERT_STMT:
-		for (CsvTomatoNode *cur = self->obj.insert_stmt.column_names; cur; ) {
+		free(self->obj.insert_stmt.table_name);
+		
+		for (CsvTomatoNode *cur = self->obj.insert_stmt.column_name_list; cur; ) {
 			csvtmt_node_del_all(cur);
 		}
-		for (CsvTomatoNode *cur = self->obj.insert_stmt.values; cur; ) {
+		for (CsvTomatoNode *cur = self->obj.insert_stmt.values_list; cur; ) {
 			csvtmt_node_del_all(cur);
 		}
 		break;
 	case CSVTMT_ND_VALUES:
-		for (CsvTomatoNode *cur = self->obj.values.exprs; cur; ) {
+		for (CsvTomatoNode *cur = self->obj.values.expr_list; cur; ) {
 			csvtmt_node_del_all(cur);
 		}		
 		break;
 	case CSVTMT_ND_EXPR:
-		free(self->obj.expr.string);
+		csvtmt_node_del_all(self->obj.expr.digit);
+		csvtmt_node_del_all(self->obj.expr.string);
+		break;
+	case CSVTMT_ND_STRING:
+		free(self->obj.string.string);
+		break;
+	case CSVTMT_ND_DIGIT:
 		break;
 	case CSVTMT_ND_COLUMN_NAME:
 		free(self->obj.column_name.column_name);
@@ -109,6 +118,12 @@ csvtmt_parser_del(CsvTomatoParser *self) {
 static CsvTomatoNode *parse_sql_stmt_list(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_sql_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_create_table_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
+static CsvTomatoNode *parse_insert_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
+static CsvTomatoNode *parse_column_name(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
+static CsvTomatoNode *parse_values(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
+static CsvTomatoNode *parse_expr(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
+static CsvTomatoNode *parse_digit(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
+static CsvTomatoNode *parse_string(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_column_def(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_column_constraint(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 
@@ -180,9 +195,9 @@ parse_sql_stmt_list(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoErro
 		return NULL;
 	}
 
-	CsvTomatoNode *sql_stmts;
+	CsvTomatoNode *sql_stmt_list;
 
-	sql_stmts = parse_sql_stmt(self, token, error);
+	sql_stmt_list = parse_sql_stmt(self, token, error);
 	if (error->error) {
 		csvtmt_node_del_all(n1);
 		return NULL;
@@ -199,10 +214,10 @@ parse_sql_stmt_list(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoErro
 		if (error->error) {
 			goto fail;
 		}
-		node_push(sql_stmts, sql_stmt);
+		node_push(sql_stmt_list, sql_stmt);
 	}
 
-	n1->obj.sql_stmt_list.sql_stmts = sql_stmts;
+	n1->obj.sql_stmt_list.sql_stmt_list = sql_stmt_list;
 	return n1;
 fail:
 	csvtmt_node_del_all(n1);
@@ -218,14 +233,23 @@ parse_sql_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *er
 
 	n1->obj.sql_stmt.create_table_stmt = parse_create_table_stmt(self, token, error);
 	if (error->error) {
-		return NULL;
+		goto fail;
 	}
-	if (!n1->obj.sql_stmt.create_table_stmt) {
-		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "faile to parse create_table_stmt");
-		return NULL;
+	if (n1->obj.sql_stmt.create_table_stmt) {
+		return n1;
 	}
 
-	return n1;
+	n1->obj.sql_stmt.insert_stmt = parse_insert_stmt(self, token, error);
+	if (error->error) {
+		goto fail;
+	}
+	if (n1->obj.sql_stmt.insert_stmt) {
+		return n1;
+	}
+
+fail:
+	csvtmt_node_del_all(n1);
+	return NULL;
 }
 
 static CsvTomatoNode * 
@@ -289,13 +313,13 @@ parse_create_table_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomato
 		goto fail;
 	}
 
-	CsvTomatoNode *column_defs;
+	CsvTomatoNode *column_def_list;
 
-	column_defs = parse_column_def(self, token, error);
+	column_def_list = parse_column_def(self, token, error);
 	if (error->error) {
 		goto fail;
 	}
-	if (!column_defs) {
+	if (!column_def_list) {
 		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found first column def on CREATE TABLE");
 		goto fail;
 	}
@@ -316,10 +340,10 @@ parse_create_table_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomato
 			goto fail;
 		}
 
-		node_push(column_defs, clmn);
+		node_push(column_def_list, clmn);
 	}
 
-	n1->obj.create_table_stmt.column_defs = column_defs;
+	n1->obj.create_table_stmt.column_def_list = column_def_list;
 
 	return n1;
 fail:
@@ -422,6 +446,264 @@ parse_column_constraint(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomato
 	}
 
 ok:
+	return n1;
+fail:
+	csvtmt_node_del_all(n1);
+	return NULL;
+}
+
+static CsvTomatoNode *
+parse_insert_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error) {
+	if (kind(token) != CSVTMT_TK_INSERT) {
+		return NULL;
+	}
+	next(token);
+
+	if (kind(token) != CSVTMT_TK_INTO) {
+		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found INTO after INSERT on insert statement");
+		return NULL;
+	}
+	next(token);
+
+	if (kind(token) != CSVTMT_TK_IDENT) {
+		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found table name after INSERT INTO on insert statement");
+		return NULL;
+	}
+
+	CsvTomatoNode *n1 = csvtmt_node_new(CSVTMT_ND_INSERT_STMT, error);
+	if (error->error) {
+		return NULL;
+	}
+
+	n1->obj.insert_stmt.table_name = csvtmt_strdup(text(token), error);
+	if (error->error) {
+		goto fail;
+	}
+
+	if (kind(token) == CSVTMT_TK_BEG_PAREN) {
+		// [ '(' column_name ( ',' column_name ) * ')' ]
+		next(token);
+
+		CsvTomatoNode *column_name_list = parse_column_name(self, token, error);
+		if (error->error) {
+			goto fail;
+		}
+		if (!column_name_list) {
+			csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found column name after table name on insert statement");
+			goto fail;
+		}
+
+		for (; !is_end(token); ) {
+			if (kind(token) != CSVTMT_TK_COMMA) {
+				break;
+			}
+			next(token);
+
+			CsvTomatoNode *column_name = parse_column_name(self, token, error);
+			if (error->error) {
+				goto fail;
+			}
+			if (!column_name) {
+				csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found column name after comma on insert statement");
+				goto fail;
+			}
+
+			node_push(column_name_list, column_name);
+		}
+
+		if (kind(token) != CSVTMT_TK_END_PAREN) {
+			csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found ) after column name on insert statement");
+			goto fail;
+		}
+		next(token);
+
+		n1->obj.insert_stmt.column_name_list = column_name_list;
+	}
+
+	if (kind(token) == CSVTMT_TK_VALUES) {
+		next(token);
+
+		CsvTomatoNode *values_list = parse_values(self, token, error);
+		if (error->error) {
+			goto fail;
+		}
+		if (!values_list) {
+			csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found values on insert statement");
+			goto fail;
+		}
+
+		for (; !is_end(token); ) {
+			if (kind(token) == CSVTMT_TK_COMMA) {
+				next(token);
+			} else {
+				break;
+			}
+
+			CsvTomatoNode *values = parse_values(self, token, error);
+			if (error->error) {
+				goto fail;
+			}
+			if (!values) {
+				csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found values after comma on insert statement");
+				goto fail;
+			}
+		}
+
+		n1->obj.insert_stmt.values_list = values_list;
+	}
+
+	return n1;
+fail:
+	csvtmt_node_del_all(n1);
+	return NULL;
+}
+
+static CsvTomatoNode *
+parse_column_name(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error) {
+	if (kind(token) != CSVTMT_TK_IDENT) {
+		return NULL;
+	}
+
+	CsvTomatoNode *n1 = csvtmt_node_new(CSVTMT_ND_COLUMN_NAME, error);
+	if (error->error) {
+		return NULL;
+	}
+
+	n1->obj.column_name.column_name = csvtmt_strdup(text(token), error);
+	if (error->error) {
+		goto fail;
+	}
+
+	return n1;
+fail:
+	csvtmt_node_del_all(n1);
+	return NULL;
+}
+
+static CsvTomatoNode *
+parse_values(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error) {
+	if (kind(token) != CSVTMT_TK_BEG_PAREN) {
+		return NULL;
+	}
+	next(token);
+
+	CsvTomatoNode *n1 = csvtmt_node_new(CSVTMT_ND_VALUES, error);
+	if (error->error) {
+		return NULL;
+	}
+
+	CsvTomatoNode *expr_list = parse_expr(self, token, error);
+	if (error->error) {
+		goto fail;
+	}
+	if (!expr_list) {
+		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found expression on VALUES");
+		goto fail;
+	}
+
+	for (; !is_end(token); ) {
+		if (kind(token) == CSVTMT_TK_COMMA) {
+			next(token);
+		} else {
+			break;
+		}
+
+		CsvTomatoNode *expr = parse_expr(self, token, error);
+		if (error->error) {
+			goto fail;
+		}
+		if (!expr) {
+			csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found expression after comma on VALUES");
+			goto fail;
+		}
+
+		node_push(expr_list, expr);
+	}
+
+	if (kind(token) != CSVTMT_TK_END_PAREN) {
+		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found ) on VALUES");
+		return NULL;
+	}
+	next(token);
+
+	n1->obj.values.expr_list = expr_list;
+
+	return n1;
+fail:
+	csvtmt_node_del_all(n1);
+	return NULL;
+}
+
+static CsvTomatoNode *
+parse_expr(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error) {
+	CsvTomatoNode *n1 = csvtmt_node_new(CSVTMT_ND_EXPR, error);
+	if (error->error) {
+		return NULL;
+	}
+
+	CsvTomatoNode *n2;
+
+	n2 = parse_digit(self, token, error);
+	if (error->error) {
+		goto fail;
+	}
+	if (n2) {
+		n1->obj.expr.digit = n2;
+	} else {
+		n2 = parse_string(self, token, error);
+		if (error->error) {
+			goto fail;
+		}
+		if (n2) {
+			n1->obj.expr.string = n2;
+		} else {
+			goto fail;
+		}
+	}
+
+	return n1;
+fail:
+	csvtmt_node_del_all(n1);
+	return NULL;
+}
+
+static CsvTomatoNode *
+parse_digit(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error) {
+	CsvTomatoNode *n1 = csvtmt_node_new(CSVTMT_ND_DIGIT, error);
+	if (error->error) {
+		return NULL;
+	}	
+
+	if (kind(token) == CSVTMT_TK_INT) {
+		n1->obj.digit.int_digit = (*token)->int_digit;
+	} else if (kind(token) == CSVTMT_TK_FLOAT) {
+		n1->obj.digit.float_digit = (*token)->float_digit;
+	} else {
+		goto fail;
+	}
+	
+	return n1;
+fail:
+	csvtmt_node_del_all(n1);
+	return NULL;
+}
+
+static CsvTomatoNode *
+parse_string(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error) {
+	CsvTomatoNode *n1 = csvtmt_node_new(CSVTMT_ND_STRING, error);
+	if (error->error) {
+		return NULL;
+	}
+
+	if (kind(token) == CSVTMT_TK_STRING) {
+		n1->obj.string.string = csvtmt_strdup(text(token), error);
+		if (error->error) {
+			goto fail;
+		}
+	} else {
+		goto fail;
+	}
+
 	return n1;
 fail:
 	csvtmt_node_del_all(n1);
