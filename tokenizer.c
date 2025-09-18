@@ -99,6 +99,7 @@ tokenize_ident(CsvTomatoTokenizer *self, CsvTomatoError *error) {
 	else if (!strcasecmp(tok->text, "exists")) tok->kind = CSVTMT_TK_EXISTS;
 	else if (!strcasecmp(tok->text, "integer")) tok->kind = CSVTMT_TK_INTEGER;
 	else if (!strcasecmp(tok->text, "primary")) tok->kind = CSVTMT_TK_PRIMARY;
+	else if (!strcasecmp(tok->text, "autoincrement")) tok->kind = CSVTMT_TK_AUTOINCREMENT;
 	else if (!strcasecmp(tok->text, "key")) tok->kind = CSVTMT_TK_KEY;
 	else if (!strcasecmp(tok->text, "text")) tok->kind = CSVTMT_TK_TEXT;
 	else if (!strcasecmp(tok->text, "not")) tok->kind = CSVTMT_TK_NOT;

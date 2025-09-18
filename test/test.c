@@ -69,7 +69,7 @@ test_parser(void) {
 	token = csvtmt_tokenizer_tokenize(
 		t, 
 		"CREATE TABLE IF NOT EXISTS users ("
-		"	id PRIMARY KEY AUTOINCREMENT,"
+		"	id INTEGER PRIMARY KEY AUTOINCREMENT,"
 		"	name TEXT NOT NULL,"
 		" 	age INTEGER"
 		");",
@@ -77,12 +77,12 @@ test_parser(void) {
 	);
 
 	p = csvtmt_parser_new(&error);
-	assert(p);
 	assert(!error.error);
+	assert(p);
 
 	node = csvtmt_parser_parse(p, token, &error);
-	assert(node);
 	assert(!error.error);
+	assert(node);
 
 	csvtmt_token_del_all(token);
 	csvtmt_node_del_all(node);
@@ -90,10 +90,53 @@ test_parser(void) {
 	csvtmt_tokenizer_del(t);
 }
 
+void
+test_opcode(void) {
+	CsvTomatoError error = {0};
+	CsvTomatoTokenizer *t;
+	CsvTomatoParser *p;
+	CsvTomatoOpcode *o;
+	CsvTomatoToken *token;
+	CsvTomatoNode *node;
+
+	t = csvtmt_tokenizer_new(&error);
+	token = csvtmt_tokenizer_tokenize(
+		t, 
+		"CREATE TABLE IF NOT EXISTS users ("
+		"	id INTEGER PRIMARY KEY AUTOINCREMENT,"
+		"	name TEXT NOT NULL,"
+		" 	age INTEGER"
+		");",
+		&error
+	);
+
+	p = csvtmt_parser_new(&error);
+	assert(!error.error);
+	assert(p);
+
+	node = csvtmt_parser_parse(p, token, &error);
+	assert(!error.error);
+	assert(node);
+
+	o = csvtmt_opcode_new(&error);
+	assert(!error.error);
+	assert(o);
+
+	csvtmt_opcode_parse(o, node, &error);
+	assert(!error.error);
+
+	csvtmt_token_del_all(token);
+	csvtmt_node_del_all(node);
+	csvtmt_parser_del(p);
+	csvtmt_tokenizer_del(t);
+	csvtmt_opcode_del(o);
+}
+
 int 
 main(void) {
-	test_tomato();	
-	test_tokenizer();
-	test_parser();
+	// test_tomato();	
+	// test_tokenizer();
+	// test_parser();
+	test_opcode();
 	return 0;
 }

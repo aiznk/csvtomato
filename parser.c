@@ -33,6 +33,7 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 	case CSVTMT_ND_NONE:
 		break;
 	case CSVTMT_ND_STMT_LIST:
+		// puts("CSVTMT_ND_STMT_LIST");
 		for (CsvTomatoNode *cur = self->obj.sql_stmt_list.sql_stmts; cur; ) {
 			CsvTomatoNode *rm = cur;
 			cur = cur->next;
@@ -40,9 +41,11 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 		}
 		break;
 	case CSVTMT_ND_STMT:
+		// puts("CSVTMT_ND_STMT");
 		csvtmt_node_del_all(self->obj.sql_stmt.create_table_stmt);
 		break;
 	case CSVTMT_ND_CREATE_TABLE_STMT:
+		// puts("CSVTMT_ND_CREATE_TABLE_STMT");
 		free(self->obj.create_table_stmt.table_name);
 		for (CsvTomatoNode *cur = self->obj.create_table_stmt.column_defs; cur; ) {
 			CsvTomatoNode *rm = cur;
@@ -51,10 +54,12 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 		}
 		break;
 	case CSVTMT_ND_COLUMN_DEF:
+		// puts("CSVTMT_ND_COLUMN_DEF");
 		free(self->obj.column_def.column_name);
 		csvtmt_node_del_all(self->obj.column_def.column_constraint);
 		break;
 	case CSVTMT_ND_COLUMN_CONSTRAINT:
+		// puts("CSVTMT_ND_COLUMN_CONSTRAINT");
 		break;
 	}
 
@@ -116,13 +121,37 @@ text(CsvTomatoToken **token) {
 	return (*token)->text;
 }
 
+static void
+node_push(CsvTomatoNode *node, CsvTomatoNode *n) {
+	CsvTomatoNode *tail = NULL;
+
+	for (CsvTomatoNode *cur = node; cur; cur = cur->next) {
+		if (!cur->next) {
+			tail = cur;
+			break;
+		}
+	}
+
+	if (tail) {
+		tail->next = n;
+	}
+}
+
 CsvTomatoNode *
 csvtmt_parser_parse(
 	CsvTomatoParser *self,
 	CsvTomatoToken *token,
 	CsvTomatoError *error
 ) {
-	return parse_sql_stmt_list(self, &token, error);
+	CsvTomatoToken **tok = &token;
+
+	if (kind(tok) == CSVTMT_TK_ROOT) {
+		next(tok);
+	} else {
+		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found root token");
+		return NULL;
+	}
+	return parse_sql_stmt_list(self, tok, error);
 }
 
 static CsvTomatoNode * 
@@ -136,7 +165,7 @@ parse_sql_stmt_list(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoErro
 
 	sql_stmts = parse_sql_stmt(self, token, error);
 	if (error->error) {
-		csvtmt_node_del(n1);
+		csvtmt_node_del_all(n1);
 		return NULL;
 	}
 
@@ -157,7 +186,7 @@ parse_sql_stmt_list(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoErro
 	n1->obj.sql_stmt_list.sql_stmts = sql_stmts;
 	return n1;
 fail:
-	csvtmt_node_del(n1);
+	csvtmt_node_del_all(n1);
 	return NULL;
 }
 
@@ -172,24 +201,12 @@ parse_sql_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *er
 	if (error->error) {
 		return NULL;
 	}
+	if (!n1->obj.sql_stmt.create_table_stmt) {
+		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "faile to parse create_table_stmt");
+		return NULL;
+	}
 
 	return n1;
-}
-
-static void
-node_push(CsvTomatoNode *node, CsvTomatoNode *n) {
-	CsvTomatoNode *tail = NULL;
-
-	for (CsvTomatoNode *cur = node; cur; cur = cur->next) {
-		if (!cur->next) {
-			tail = cur;
-			break;
-		}
-	}
-
-	if (tail) {
-		tail->next = n;
-	}
 }
 
 static CsvTomatoNode * 
@@ -222,6 +239,7 @@ parse_create_table_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomato
 			next(token);
 			if (kind(token) == CSVTMT_TK_EXISTS) {
 				next(token);
+				n1->obj.create_table_stmt.if_not_exists = true;
 			} else {
 				csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found EXISTS after IF NOT on CREATE TABLE");
 				goto fail;
@@ -252,13 +270,13 @@ parse_create_table_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomato
 		goto fail;
 	}
 
-	CsvTomatoNode *column_def;
+	CsvTomatoNode *column_defs;
 
-	column_def = parse_column_def(self, token, error);
+	column_defs = parse_column_def(self, token, error);
 	if (error->error) {
 		goto fail;
 	}
-	if (!column_def) {
+	if (!column_defs) {
 		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found first column def on CREATE TABLE");
 		goto fail;
 	}
@@ -279,12 +297,14 @@ parse_create_table_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomato
 			goto fail;
 		}
 
-		node_push(column_def, clmn);
+		node_push(column_defs, clmn);
 	}
+
+	n1->obj.create_table_stmt.column_defs = column_defs;
 
 	return n1;
 fail:
-	csvtmt_node_del(n1);
+	csvtmt_node_del_all(n1);
 	return NULL;
 }
 
@@ -336,7 +356,7 @@ parse_column_def(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *
 ok:
 	return n1;
 fail:
-	csvtmt_node_del(n1);
+	csvtmt_node_del_all(n1);
 	return NULL;
 }
 
@@ -378,13 +398,13 @@ parse_column_constraint(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomato
 			goto fail;
 		}
 	} else {
-		csvtmt_node_del(n1);
+		csvtmt_node_del_all(n1);
 		return NULL;  // not error
 	}
 
 ok:
 	return n1;
 fail:
-	csvtmt_node_del(n1);
+	csvtmt_node_del_all(n1);
 	return NULL;
 }
