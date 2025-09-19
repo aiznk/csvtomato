@@ -35,6 +35,12 @@ enum {
 	CSVTMT_STR_SIZE = 256,
 	CSVTMT_IDENT_SIZE = 256,
 	CSVTMT_PATH_SIZE = 256,
+	CSVTMT_COLUMN_NAMES_ARRAY_SIZE = 32,
+	CSVTMT_VALUES_ARRAY_SIZE = 32,
+	CSVTMT_TYPES_ARRAY_SIZE = 64,
+	CSVTMT_TYPE_NAME_SIZE = 256,
+	CSVTMT_TYPE_DEF_SIZE = 256,
+	CSVTMT_CSV_COLS_SIZE = 128,
 };
 
 typedef enum {
@@ -45,6 +51,7 @@ typedef enum {
 	CSVTMT_ERR_SYNTAX,
 	CSVTMT_ERR_EXEC,
 	CSVTMT_ERR_FILE_IO,
+	CSVTMT_ERR_INDEX_OUT_OF_RANGE,
 } CsvTomatoErrorKind;
 
 typedef enum {
@@ -88,7 +95,7 @@ typedef enum {
 	CSVTMT_ND_INSERT_STMT,
 	CSVTMT_ND_VALUES,
 	CSVTMT_ND_EXPR,
-	CSVTMT_ND_DIGIT,
+	CSVTMT_ND_NUMBER,
 	CSVTMT_ND_STRING,
 	CSVTMT_ND_COLUMN_NAME,
 	CSVTMT_ND_COLUMN_DEF,
@@ -97,10 +104,17 @@ typedef enum {
 
 typedef enum {
 	CSVTMT_OP_NONE,
-	CSVTMT_OP_CREATE_TABLE_BEG,
-	CSVTMT_OP_CREATE_TABLE_END,
-	CSVTMT_OP_INSERT_INTO_BEG,
-	CSVTMT_OP_INSERT_INTO_END,
+	CSVTMT_OP_CREATE_TABLE_STMT_BEG,
+	CSVTMT_OP_CREATE_TABLE_STMT_END,
+	CSVTMT_OP_INSERT_STMT_BEG,
+	CSVTMT_OP_INSERT_STMT_END,
+	CSVTMT_OP_COLUMN_NAMES_BEG,
+	CSVTMT_OP_COLUMN_NAMES_END,
+	CSVTMT_OP_VALUES_BEG,
+	CSVTMT_OP_VALUES_END,
+	CSVTMT_OP_INT_VALUE,
+	CSVTMT_OP_FLOAT_VALUE,
+	CSVTMT_OP_STRING_VALUE,
 	CSVTMT_OP_COLUMN_DEF,
 } CsvTomatoOpcodeKind;
 
@@ -111,6 +125,7 @@ typedef enum {
 #define CSVTMT_TRANSTENT csvtmt_free
 #define CSVTMT_STATIC csvtmt_static
 #define csvtmt_move(o) o
+#define csvtmt_numof(ary) (sizeof ary / sizeof ary[0])
 
 /********
 * types *
@@ -149,6 +164,9 @@ typedef struct CsvTomatoExecutor CsvTomatoExecutor;
 struct CsvTomatoStringList;
 typedef struct CsvTomatoStringList CsvTomatoStringList;
 
+struct CsvTomatoCsvLine;
+typedef struct CsvTomatoCsvLine CsvTomatoCsvLine;
+
 /**********
 * structs *
 **********/
@@ -171,8 +189,8 @@ struct CsvTomatoToken {
 	CsvTomatoTokenKind kind;
 	char text[CSVTMT_STR_SIZE];
 	size_t len;
-	int64_t int_digit;
-	double float_digit;
+	int64_t int_value;
+	double float_value;
 	struct CsvTomatoToken *next;
 };
 
@@ -216,13 +234,15 @@ struct CsvTomatoNode {
 			struct CsvTomatoNode *expr_list;
 		} values;
 		struct {
-			struct CsvTomatoNode *digit;
+			struct CsvTomatoNode *number;
 			struct CsvTomatoNode *string;
 		} expr;
 		struct {
-			int64_t int_digit;
-			double float_digit;
-		} digit;
+			int64_t int_value;
+			double float_value;
+			bool is_int;
+			bool is_float;
+		} number;
 		struct {
 			char *string;
 		} string;
@@ -260,9 +280,16 @@ struct CsvTomatoOpcodeElem {
 		} create_table_stmt;
 		struct {
 			char *table_name;
-			CsvTomatoStringList *column_name_list;
-			CsvTomatoValuesList *values;TODO
 		} insert_stmt;
+		struct {
+			char *value;
+		} string_value;
+		struct {
+			int64_t value;
+		} int_value;
+		struct {
+			double value;
+		} float_value;
 		struct {
 			char *column_name;
 			CsvTomatoTokenKind type_name;
@@ -277,6 +304,11 @@ struct CsvTomatoOpcodeElem {
 
 struct CsvTomatoExecutor {
 	char db_dir[CSVTMT_PATH_SIZE];
+};
+
+struct CsvTomatoCsvLine {
+	char *columns[CSVTMT_CSV_COLS_SIZE];
+	size_t len;
 };
 
 /*************
@@ -456,3 +488,14 @@ csvtmt_strlist_move_back_str(
 	CsvTomatoError *error
 );
 
+// csv.c
+
+void
+csvtmt_csvline_parse_stream(
+	CsvTomatoCsvLine *self,
+	FILE *fp,
+	CsvTomatoError *error
+);
+
+void
+csvtmt_csvline_destroy(CsvTomatoCsvLine *self);

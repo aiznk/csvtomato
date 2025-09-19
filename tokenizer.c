@@ -152,7 +152,7 @@ tokenize_string(
 }
 
 static CsvTomatoToken *
-tokenize_digit(
+tokenize_number(
 	CsvTomatoTokenizer *self, 
 	CsvTomatoError *error
 ) {
@@ -186,9 +186,9 @@ tokenize_digit(
 	}
 
 	if (tok->kind == CSVTMT_TK_INT) {
-		tok->int_digit = atoi(tok->text);
+		tok->int_value = atoi(tok->text);
 	} else {
-		tok->float_digit = atof(tok->text);
+		tok->float_value = atof(tok->text);
 	}
 
 	return tok;
@@ -231,7 +231,7 @@ csvtmt_tokenizer_tokenize(
 			}
 			tok = tok->next;
 		} else if (isdigit(c1)) {
-			tok->next = tokenize_digit(self, error);
+			tok->next = tokenize_number(self, error);
 			if (error->error) {
 				goto fail;
 			}
