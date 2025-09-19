@@ -17,6 +17,9 @@
 	void\
 	NS ## _del(NAME *self);\
 	\
+	TYPE *\
+	NS ## _esc_del(NAME *self);\
+	\
 	NAME *\
 	NS ## _resize(NAME *self, size_t newcapa);\
 	\
@@ -60,6 +63,14 @@
 			free(self->str);\
 			free(self);\
 		}\
+	}\
+	\
+	TYPE *\
+	NS ## _esc_del(NAME *self) {\
+		TYPE *str = self->str;\
+		self->str = NULL;\
+		NS ## _del(self);\
+		return str;\
 	}\
 	\
 	NAME *\

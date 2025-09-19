@@ -56,7 +56,7 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 		break;
 	case CSVTMT_ND_INSERT_STMT:
 		free(self->obj.insert_stmt.table_name);
-		
+
 		for (CsvTomatoNode *cur = self->obj.insert_stmt.column_name_list; cur; ) {
 			csvtmt_node_del_all(cur);
 		}
@@ -70,13 +70,13 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 		}		
 		break;
 	case CSVTMT_ND_EXPR:
-		csvtmt_node_del_all(self->obj.expr.digit);
+		csvtmt_node_del_all(self->obj.expr.number);
 		csvtmt_node_del_all(self->obj.expr.string);
 		break;
 	case CSVTMT_ND_STRING:
 		free(self->obj.string.string);
 		break;
-	case CSVTMT_ND_DIGIT:
+	case CSVTMT_ND_NUMBER:
 		break;
 	case CSVTMT_ND_COLUMN_NAME:
 		free(self->obj.column_name.column_name);
@@ -122,7 +122,7 @@ static CsvTomatoNode *parse_insert_stmt(CsvTomatoParser *self, CsvTomatoToken **
 static CsvTomatoNode *parse_column_name(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_values(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_expr(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
-static CsvTomatoNode *parse_digit(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
+static CsvTomatoNode *parse_number(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_string(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_column_def(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_column_constraint(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
@@ -643,12 +643,12 @@ parse_expr(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error)
 
 	CsvTomatoNode *n2;
 
-	n2 = parse_digit(self, token, error);
+	n2 = parse_number(self, token, error);
 	if (error->error) {
 		goto fail;
 	}
 	if (n2) {
-		n1->obj.expr.digit = n2;
+		n1->obj.expr.number = n2;
 	} else {
 		n2 = parse_string(self, token, error);
 		if (error->error) {
@@ -668,16 +668,18 @@ fail:
 }
 
 static CsvTomatoNode *
-parse_digit(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error) {
-	CsvTomatoNode *n1 = csvtmt_node_new(CSVTMT_ND_DIGIT, error);
+parse_number(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error) {
+	CsvTomatoNode *n1 = csvtmt_node_new(CSVTMT_ND_NUMBER, error);
 	if (error->error) {
 		return NULL;
 	}	
 
 	if (kind(token) == CSVTMT_TK_INT) {
-		n1->obj.digit.int_digit = (*token)->int_digit;
+		n1->obj.number.int_value = (*token)->int_value;
+		n1->obj.number.is_int = true;
 	} else if (kind(token) == CSVTMT_TK_FLOAT) {
-		n1->obj.digit.float_digit = (*token)->float_digit;
+		n1->obj.number.float_value = (*token)->float_value;
+		n1->obj.number.is_float = true;
 	} else {
 		goto fail;
 	}
