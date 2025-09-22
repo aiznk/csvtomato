@@ -1,4 +1,4 @@
-#include "csvtomato.h"
+#include <csvtomato.h>
 
 CsvTomatoToken *
 csvtmt_token_new(
@@ -135,7 +135,6 @@ tokenize_string(
 		char c1 = self->code[self->index];
 
 		if (c1 == quote) {
-			self->index--;
 			break;
 		} else if (c1 == '\\') {
 			self->index++;

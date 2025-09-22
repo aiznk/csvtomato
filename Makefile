@@ -1,24 +1,29 @@
 CC := gcc
-PROG_FLAGS := -Wall -g -O0 -std=c11 -pedantic-errors -fsanitize=address
+PROG_FLAGS_MEM := -I. -Wall -g -O0 -std=c11 -pedantic-errors -fsanitize=address
+PROG_FLAGS := -I. -Wall -g -O0 -std=c11 -pedantic-errors
 SO_FLAGS := -O2 -std=c11 -pedantic-errors
 SO := csvtomato.so
-PROG := test.out
-SRCS := $(wildcard *.c)
-OBJS := $(SRCS:.c=.o)
+TEST_PROG := test.out
+SHELL_PROG := sh.out
+SRCS := $(wildcard src/*.c)
+OBJS := $(SRCS:src/.c=src/.o)
 
-all: $(PROG) $(SO)
+all: $(TEST_PROG) $(SHELL_PROG)
 
 $(OBJS): csvtomato.h
 
 $(SO): $(SRCS)
 	$(CC) $(SO_FLAGS) -o $@ -shared $^
 
-$(PROG): $(SRCS) test/test.c
-	$(CC) $(PROG_FLAGS) -o $@ $^
+$(TEST_PROG): $(SRCS) test/test.c
+	$(CC) $(PROG_FLAGS_MEM) -o $@ $^
+
+$(SHELL_PROG): $(SRCS) shell.c
+	$(CC) $(PROG_FLAGS_MEM) -o $@ $^
 
 .PHONY: clean test
 clean:
-	rm -f *.out *.so *.o
+	rm -f *.out *.so *.o src/*.o
 
 test:
 	make clean

@@ -154,48 +154,91 @@ test_executor(void) {
 	CsvTomatoOpcode *o;
 	CsvTomatoToken *token;
 	CsvTomatoNode *node;
+	CsvTomatoModel model = {0};
 
-	const char *query = "CREATE TABLE IF NOT EXISTS users ("
-		"	id INTEGER PRIMARY KEY AUTOINCREMENT,"
-		"	name TEXT NOT NULL,"
-		" 	age INTEGER"
-		");";
+	#undef die
+	#define die() {\
+		if (error.error) {\
+			csvtmt_error_show(&error);\
+			exit(1);\
+		}\
+	}\
 
-	t = csvtmt_tokenizer_new(&error);
-	token = csvtmt_tokenizer_tokenize(t, query, &error);
+	#undef setup
+	#define setup() {\
+		t = csvtmt_tokenizer_new(&error);\
+		p = csvtmt_parser_new(&error);\
+		o = csvtmt_opcode_new(&error);\
+		e = csvtmt_executor_new(&error);\
+	}\
 
-	p = csvtmt_parser_new(&error);
-	assert(!error.error);
-	assert(p);
+	#undef cleanup
+	#define cleanup() {\
+		csvtmt_token_del_all(token);\
+		csvtmt_node_del_all(node);\
+		csvtmt_parser_del(p);\
+		csvtmt_tokenizer_del(t);\
+		csvtmt_opcode_del(o);\
+		csvtmt_executor_del(e);\
+	}\
 
-	node = csvtmt_parser_parse(p, token, &error);
-	assert(!error.error);
-	assert(node);
+	#undef exec
+	#define exec(query) {\
+		setup();\
+		token = csvtmt_tokenizer_tokenize(t, query, &error);\
+		die();\
+		node = csvtmt_parser_parse(p, token, &error);\
+		die();\
+		csvtmt_opcode_parse(o, node, &error);\
+		die();\
+		csvtmt_executor_exec(e, &model, "test_db", o->elems, o->len, &error);\
+		die();\
+		cleanup();\
+	}\
 
-	o = csvtmt_opcode_new(&error);
-	assert(!error.error);
-	assert(o);
-
-	csvtmt_opcode_parse(o, node, &error);
-	assert(!error.error);
+	#undef exec_fail
+	#define exec_fail(query, errmsg) {\
+		token = csvtmt_tokenizer_tokenize(t, query, &error);\
+		die();\
+		node = csvtmt_parser_parse(p, token, &error);\
+		die();\
+		csvtmt_opcode_parse(o, node, &error);\
+		die();\
+		csvtmt_executor_exec(e, &model, "test_db", o->elems, o->len, &error);\
+		if (error.error) {\
+			csvtmt_error_show(&error);\
+			assert(strstr(csvtmt_error_msg(&error), errmsg));\
+			exit(1);\
+		} else {\
+			assert(0 && "failed exec_fail. no errors");\
+		}\
+	}\
 
 	if (!csvtmt_file_exists("test_db")) {
 		csvtmt_file_mkdir("test_db");
 	}
 
-	e = csvtmt_executor_new("test_db", &error);
-	assert(!error.error);
-	assert(e);
-
-	csvtmt_executor_exec(e, o->elems, o->len, &error);
-	assert(!error.error);
-
-	csvtmt_token_del_all(token);
-	csvtmt_node_del_all(node);
-	csvtmt_parser_del(p);
-	csvtmt_tokenizer_del(t);
-	csvtmt_opcode_del(o);
-	csvtmt_executor_del(e);
+	exec(
+		"CREATE TABLE IF NOT EXISTS users ("
+		"	id INTEGER PRIMARY KEY AUTOINCREMENT,"
+		"	name TEXT NOT NULL,"
+		" 	age INTEGER"
+		");"
+	);
+	// exec_fail(
+	// 	"CREATE TABLE users ("
+	// 	"	id INTEGER PRIMARY KEY AUTOINCREMENT,"
+	// 	"	name TEXT NOT NULL,"
+	// 	" 	age INTEGER"
+	// 	");",
+	// 	"table users already exists"
+	// );
+	exec(
+		"INSERT INTO users (name, age) VALUES (\"Alice\", 20);"
+	);
+	// exec(
+	// 	"INSERT INTO users (id, name, age) VALUES (1, \"Alice\", 20);"
+	// );
 }
 
 
@@ -343,8 +386,8 @@ main(void) {
 	// test_tomato();	
 	test_csv();
 	// test_tokenizer();
-	test_parser();
+	// test_parser();
 	// test_opcode();
-	// test_executor();
+	test_executor();
 	return 0;
 }

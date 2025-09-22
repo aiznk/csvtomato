@@ -1,4 +1,4 @@
-#include "csvtomato.h"
+#include <csvtomato.h>
 
 CsvTomatoOpcode *
 csvtmt_opcode_new(CsvTomatoError *error) {
@@ -133,7 +133,9 @@ opcode_create_table_stmt(
 	CsvTomatoNode *node, 
 	CsvTomatoError *error
 ) {
-	assert(node);
+	if (!node) {
+		return;
+	}
 
 	{
 		CsvTomatoOpcodeElem elem = {0};
@@ -175,7 +177,9 @@ opcode_insert_stmt(
 	CsvTomatoNode *node, 
 	CsvTomatoError *error
 ) {
-	assert(node);
+	if (!node) {
+		return;
+	}
 
 	{
 		CsvTomatoOpcodeElem elem = {0};
@@ -291,9 +295,11 @@ opcode_values(
 	assert(node);
 	assert(node->kind == CSVTMT_ND_VALUES);
 
-	opcode_expr(self, node->obj.values.expr_list, error);
-	if (error->error) {
-		return;
+	for (CsvTomatoNode *expr = node->obj.values.expr_list; expr; expr = expr->next) {
+		opcode_expr(self, expr, error);
+		if (error->error) {
+			return;
+		}
 	}
 }
 
@@ -323,7 +329,9 @@ opcode_number(
 	CsvTomatoNode *node,
 	CsvTomatoError *error
 ) {
-	assert(node);
+	if (!node) {
+		return;
+	}
 	assert(node->kind == CSVTMT_ND_NUMBER);
 
 	CsvTomatoOpcodeElem elem = {0};
@@ -354,7 +362,9 @@ opcode_string(
 	CsvTomatoNode *node,
 	CsvTomatoError *error
 ) {
-	assert(node);
+	if (!node) {
+		return;
+	}
 	assert(node->kind == CSVTMT_ND_STRING);
 
 	CsvTomatoOpcodeElem elem = {0};

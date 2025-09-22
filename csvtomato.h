@@ -1,6 +1,6 @@
 #pragma once
 
-#include "stringtmpl.h"
+#include "src/stringtmpl.h"
 DECL_STRING(CsvTomatoString, csvtmt_str, char)
 
 #include <stdio.h>
@@ -23,6 +23,7 @@ DECL_STRING(CsvTomatoString, csvtmt_str, char)
     #include <sys/stat.h>
     #include <sys/types.h>
     #include <unistd.h>
+    #include <utime.h>
     #define CSVTMT_MKDIR(path) mkdir(path, 0755)
 #endif
 
@@ -122,6 +123,7 @@ typedef enum {
 * macros *
 *********/
 
+#define CSVTMT_COL_MODE "__MODE__"
 #define CSVTMT_TRANSTENT csvtmt_free
 #define CSVTMT_STATIC csvtmt_static
 #define csvtmt_move(o) o
@@ -166,6 +168,9 @@ typedef struct CsvTomatoStringList CsvTomatoStringList;
 
 struct CsvTomatoCsvLine;
 typedef struct CsvTomatoCsvLine CsvTomatoCsvLine;
+
+struct CsvTomatoModel;
+typedef struct CsvTomatoModel CsvTomatoModel;
 
 /**********
 * structs *
@@ -303,12 +308,57 @@ struct CsvTomatoOpcodeElem {
 };
 
 struct CsvTomatoExecutor {
-	char db_dir[CSVTMT_PATH_SIZE];
+	int a;
 };
 
 struct CsvTomatoCsvLine {
 	char *columns[CSVTMT_CSV_COLS_SIZE];
 	size_t len;
+};
+
+typedef enum {
+	CSVTMT_VAL_NONE,
+	CSVTMT_VAL_INT,
+	CSVTMT_VAL_FLOAT,
+	CSVTMT_VAL_STRING,
+} CsvTomatoValueKind;
+
+typedef struct {
+	CsvTomatoValueKind kind;
+	int64_t int_value;
+	double float_value;
+	const char *string_value;
+} CsvTomatoValue;
+
+typedef struct {
+	char type_name[CSVTMT_TYPE_NAME_SIZE];
+	char type_def[CSVTMT_TYPE_DEF_SIZE];
+	size_t index;
+} CsvTomatoColumnType;
+
+typedef struct {
+	CsvTomatoColumnType types[CSVTMT_TYPES_ARRAY_SIZE];
+	size_t types_len;
+} CsvTomatoHeader;
+
+typedef enum {
+	CSVTMT_MODE_NONE,
+	CSVTMT_MODE_COLUMN_NAMES,
+	CSVTMT_MODE_VALUES,
+} CsvTomatoMode;
+
+struct CsvTomatoModel {
+	char db_dir[CSVTMT_PATH_SIZE];
+	const char *table_name;
+	char table_path[CSVTMT_PATH_SIZE];
+	bool do_create_table;
+	const char *column_names[CSVTMT_COLUMN_NAMES_ARRAY_SIZE];
+	size_t column_names_len;
+	CsvTomatoValue values[CSVTMT_VALUES_ARRAY_SIZE];
+	size_t values_len;
+	CsvTomatoHeader header;
+	CsvTomatoString *buf;
+	CsvTomatoMode mode;
 };
 
 /*************
@@ -325,10 +375,22 @@ csvtmt_error_format(
 	...
 );
 
+void
+csvtmt_error_show(const CsvTomatoError *self);
+
+const char *
+csvtmt_error_msg(const CsvTomatoError *self);
+
 // utils.c
 
 char *
 csvtmt_strdup(const char *s, CsvTomatoError *error);
+
+void
+csvtmt_quick_exec(const char *db_dir, const char *query);
+
+void _Noreturn
+csvtmt_die(const char *s);
 
 // csvtomato.c
 
@@ -452,7 +514,7 @@ csvtmt_opcode_parse(
 // executor.c
 
 CsvTomatoExecutor *
-csvtmt_executor_new(const char *db_dir, CsvTomatoError *error);
+csvtmt_executor_new(CsvTomatoError *error);
 
 void
 csvtmt_executor_del(CsvTomatoExecutor *self);
@@ -460,6 +522,8 @@ csvtmt_executor_del(CsvTomatoExecutor *self);
 void
 csvtmt_executor_exec(
 	CsvTomatoExecutor *self,
+	CsvTomatoModel *model,
+	const char *db_dir,
 	const CsvTomatoOpcodeElem *opcodes,
 	size_t opcodes_len,
 	CsvTomatoError *error
@@ -472,6 +536,9 @@ csvtmt_file_exists(const char *path);
 
 int
 csvtmt_file_mkdir(const char *path);
+
+int
+csvtmt_file_touch(const char *path);
 
 // stringlist.c 
 
@@ -499,3 +566,8 @@ csvtmt_csvline_parse_stream(
 
 void
 csvtmt_csvline_destroy(CsvTomatoCsvLine *self);
+
+// models.c
+
+void
+csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error);

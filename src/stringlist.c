@@ -1,4 +1,4 @@
-#include "csvtomato.h"
+#include <csvtomato.h>
 
 CsvTomatoStringList *
 csvtmt_strlist_new(CsvTomatoError *error) {
