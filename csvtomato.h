@@ -169,6 +169,21 @@ typedef struct CsvTomatoStringList CsvTomatoStringList;
 struct CsvTomatoCsvLine;
 typedef struct CsvTomatoCsvLine CsvTomatoCsvLine;
 
+struct CsvTomatoColumnType;
+typedef struct CsvTomatoColumnType CsvTomatoColumnType;
+
+struct CsvTomatoColumnTypeDef;
+typedef struct CsvTomatoColumnTypeDef CsvTomatoColumnTypeDef;
+
+struct CsvTomatoHeader;
+typedef struct CsvTomatoHeader CsvTomatoHeader;
+
+struct CsvTomatoValue;
+typedef struct CsvTomatoValue CsvTomatoValue;
+
+struct CsvTomatoValues;
+typedef struct CsvTomatoValues CsvTomatoValues;
+
 struct CsvTomatoModel;
 typedef struct CsvTomatoModel CsvTomatoModel;
 
@@ -323,33 +338,38 @@ typedef enum {
 	CSVTMT_VAL_STRING,
 } CsvTomatoValueKind;
 
-typedef struct {
+struct CsvTomatoValue {
 	CsvTomatoValueKind kind;
 	int64_t int_value;
 	double float_value;
 	const char *string_value;
-} CsvTomatoValue;
+};
 
-typedef struct {
+struct CsvTomatoValues {
+	CsvTomatoValue values[CSVTMT_VALUES_ARRAY_SIZE];
+	size_t len;
+};
+
+struct CsvTomatoColumnTypeDef {
 	bool integer;
 	bool text;
 	bool not_null;
 	bool null;
 	bool primary_key;
 	bool autoincrement;
-} CsvTomatoColumnTypeDef;
+};
 
-typedef struct {
+struct CsvTomatoColumnType {
 	char type_name[CSVTMT_TYPE_NAME_SIZE];
 	char type_def[CSVTMT_TYPE_DEF_SIZE];
 	CsvTomatoColumnTypeDef type_def_info;
 	size_t index;
-} CsvTomatoColumnType;
+};
 
-typedef struct {
+struct CsvTomatoHeader {
 	CsvTomatoColumnType types[CSVTMT_TYPES_ARRAY_SIZE];
 	size_t types_len;
-} CsvTomatoHeader;
+};
 
 typedef enum {
 	CSVTMT_MODE_NONE,
@@ -364,7 +384,7 @@ struct CsvTomatoModel {
 	bool do_create_table;
 	const char *column_names[CSVTMT_COLUMN_NAMES_ARRAY_SIZE];
 	size_t column_names_len;
-	CsvTomatoValue values[CSVTMT_VALUES_ARRAY_SIZE];
+	CsvTomatoValues values[CSVTMT_VALUES_ARRAY_SIZE];
 	size_t values_len;
 	CsvTomatoHeader header;
 	CsvTomatoString *buf;

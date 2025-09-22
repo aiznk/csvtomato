@@ -60,6 +60,9 @@ csvtmt_executor_exec(
 			break;
 		case CSVTMT_OP_INSERT_STMT_BEG: {
 			model->table_name = op->obj.insert_stmt.table_name;
+			model->column_names_len = 0;
+			model->values_len = 0;
+
 			snprintf(model->table_path, sizeof model->table_path, "%s/%s.csv", model->db_dir, model->table_name);
 		} break;
 		case CSVTMT_OP_INSERT_STMT_END: {
@@ -69,17 +72,19 @@ csvtmt_executor_exec(
 			}			
 		} break;
 		case CSVTMT_OP_COLUMN_NAMES_BEG: {
-			model->column_names_len = 0;
 			model->mode = CSVTMT_MODE_COLUMN_NAMES;
 		} break;
 		case CSVTMT_OP_COLUMN_NAMES_END: {
 			model->mode = CSVTMT_MODE_NONE;
 		} break;
 		case CSVTMT_OP_VALUES_BEG: {
-			model->values_len = 0;
+			if (model->values_len >= csvtmt_numof(model->values)) {
+				goto array_overflow;
+			}
 			model->mode = CSVTMT_MODE_VALUES;
 		} break;
 		case CSVTMT_OP_VALUES_END: {
+			model->values_len++;
 			model->mode = CSVTMT_MODE_NONE;
 		} break;
 		case CSVTMT_OP_STRING_VALUE: {
@@ -90,10 +95,17 @@ csvtmt_executor_exec(
 				model->column_names[model->column_names_len++] = op->obj.string_value.value;
 				break;
 			case CSVTMT_MODE_VALUES:
-				check_array(model->values);
-				model->values[model->values_len].kind = CSVTMT_VAL_STRING;
-				model->values[model->values_len].string_value = op->obj.string_value.value;
-				model->values_len++;
+				if (model->values_len >= csvtmt_numof(model->values)) {
+					goto array_overflow;
+				}
+				CsvTomatoValues *values = &model->values[model->values_len];
+				if (values->len >= csvtmt_numof(values->values)) {
+					goto array_overflow;
+				}
+				CsvTomatoValue *value = &values->values[values->len];
+				value->kind = CSVTMT_VAL_STRING;
+				value->string_value = op->obj.string_value.value;
+				values->len++;
 				break;
 			}
 		} break;
@@ -101,10 +113,17 @@ csvtmt_executor_exec(
 			switch (model->mode) {
 			default: break;
 			case CSVTMT_MODE_VALUES:
-				check_array(model->values);
-				model->values[model->values_len].kind = CSVTMT_VAL_INT;
-				model->values[model->values_len].int_value = op->obj.int_value.value;
-				model->values_len++;				
+				if (model->values_len >= csvtmt_numof(model->values)) {
+					goto array_overflow;
+				}
+				CsvTomatoValues *values = &model->values[model->values_len];
+				if (values->len >= csvtmt_numof(values->values)) {
+					goto array_overflow;
+				}
+				CsvTomatoValue *value = &values->values[values->len];
+				value->kind = CSVTMT_VAL_INT;
+				value->int_value = op->obj.int_value.value;
+				values->len++;				
 				break;
 			}
 		} break;
@@ -112,10 +131,17 @@ csvtmt_executor_exec(
 			switch (model->mode) {
 			default: break;
 			case CSVTMT_MODE_VALUES:
-				check_array(model->values);
-				model->values[model->values_len].kind = CSVTMT_VAL_FLOAT;
-				model->values[model->values_len].float_value = op->obj.float_value.value;
-				model->values_len++;				
+				if (model->values_len >= csvtmt_numof(model->values)) {
+					goto array_overflow;
+				}
+				CsvTomatoValues *values = &model->values[model->values_len];
+				if (values->len >= csvtmt_numof(values->values)) {
+					goto array_overflow;
+				}
+				CsvTomatoValue *value = &values->values[values->len];
+				value->kind = CSVTMT_VAL_FLOAT;
+				value->float_value = op->obj.float_value.value;
+				values->len++;				
 				break;
 			}
 		} break;

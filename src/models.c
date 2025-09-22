@@ -249,78 +249,84 @@ csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error) {
 		goto invalid_column;
 	}
 
-	if (model->values_len != model->column_names_len) {
-		goto invalid_values_len;
-	}
-
-	csvtmt_str_clear(model->buf);
-
-	// types:t1,t2,t3
-	// column_names:t1,t3
-	// values:1,3
-	for (size_t i = 0; i < model->header.types_len; i++) {
-		const CsvTomatoColumnType *type = &model->header.types[i];
-		if (!strcmp(type->type_name, CSVTMT_COL_MODE)) {
-			csvtmt_str_append(model->buf, "0,");
-			continue;
-		} 
-
-		// INSERT INTO table (id, name) VALUES (0, "Alice")
-		// INSERT INTO table (id, name) VALUES (0, "Alice")
-
-		int values_index = -1;
-		for (size_t j = 0; j < model->column_names_len; j++) {
-			const char *column_name = model->column_names[j];
-			if (!strcmp(type->type_name, column_name)) {
-				values_index = j;
-				break;
-			}
-		}
-		if (values_index == -1) {
-			// i は (id, name) などで指定されていないカラム。
-			// typesの情報を元にデフォルト値を入れる。
-			char col[1024];
-			type_gen_column_default_value(model, type, col, sizeof col, error);
-			if (error->error) {
-				goto failed_to_gen_type_string;
-			}
-			csvtmt_str_append(model->buf, col);
-		} else {
-			// values_indexはカラムに含まれている。
-			const CsvTomatoValue *value = &model->values[values_index];
-			char buf[1024];
-
-			switch (value->kind) {
-			default: goto invalid_value_kind; break;
-			case CSVTMT_VAL_INT:
-				snprintf(buf, sizeof buf, "%ld", value->int_value);
-				csvtmt_str_append(model->buf, buf);
-				break;
-			case CSVTMT_VAL_FLOAT:
-				snprintf(buf, sizeof buf, "%f", value->float_value);
-				csvtmt_str_append(model->buf, buf);
-				break;
-			case CSVTMT_VAL_STRING:
-				// TODO: wrap by double-quote
-				assert(value->string_value);
-				csvtmt_str_append(model->buf, value->string_value);
-				break;
-			}
-		}
-
-		csvtmt_str_push_back(model->buf, ',');
-	}
-
-	csvtmt_str_pop_back(model->buf); // ,
-
-	// write to file
+	// open table
 	errno = 0;
 	FILE *fp = fopen(model->table_path, "a");
 	if (!fp) {
 		goto failed_to_open_table;
 	}
 
-	fprintf(fp, "%s\n", model->buf->str);
+	// valuesは二次元配列。
+	// VALUES (1, 2), (3, 4), (5, 6)
+	// などに対応する。
+	for (size_t i = 0; i < model->values_len; i++) {
+		CsvTomatoValues *values = &model->values[i];
+
+		if (values->len != model->column_names_len) {
+			goto invalid_values_len;
+		}
+
+		csvtmt_str_clear(model->buf);
+
+		// types:t1,t2,t3
+		// column_names:t1,t3
+		// values:1,3
+		for (size_t j = 0; j < model->header.types_len; j++) {
+			const CsvTomatoColumnType *type = &model->header.types[j];
+			if (!strcmp(type->type_name, CSVTMT_COL_MODE)) {
+				csvtmt_str_append(model->buf, "0,");
+				continue;
+			} 
+
+			// INSERT INTO table (id, name) VALUES (0, "Alice")
+			// INSERT INTO table (id, name) VALUES (0, "Alice")
+
+			int values_index = -1;
+			for (size_t k = 0; k < model->column_names_len; k++) {
+				const char *column_name = model->column_names[k];
+				if (!strcmp(type->type_name, column_name)) {
+					values_index = k;
+					break;
+				}
+			}
+			if (values_index == -1) {
+				// j は (id, name) などで指定されていないカラム。
+				// typesの情報を元にデフォルト値を入れる。
+				char col[1024];
+				type_gen_column_default_value(model, type, col, sizeof col, error);
+				if (error->error) {
+					goto failed_to_gen_type_string;
+				}
+				csvtmt_str_append(model->buf, col);
+			} else {
+				// values_indexはカラムに含まれている。
+				const CsvTomatoValue *value = &values->values[values_index];
+				char buf[1024];
+
+				switch (value->kind) {
+				default: goto invalid_value_kind; break;
+				case CSVTMT_VAL_INT:
+					snprintf(buf, sizeof buf, "%ld", value->int_value);
+					csvtmt_str_append(model->buf, buf);
+					break;
+				case CSVTMT_VAL_FLOAT:
+					snprintf(buf, sizeof buf, "%f", value->float_value);
+					csvtmt_str_append(model->buf, buf);
+					break;
+				case CSVTMT_VAL_STRING:
+					// TODO: wrap by double-quote
+					assert(value->string_value);
+					csvtmt_str_append(model->buf, value->string_value);
+					break;
+				}
+			}
+
+			csvtmt_str_push_back(model->buf, ',');
+		}
+
+		csvtmt_str_pop_back(model->buf); // ,
+		fprintf(fp, "%s\n", model->buf->str);
+	}
 
 	fclose(fp);
 	return;

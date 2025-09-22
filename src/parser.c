@@ -555,6 +555,8 @@ parse_insert_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError 
 				csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found values after comma on insert statement");
 				goto fail;
 			}
+
+			node_push(values_list, values);
 		}
 
 		n1->obj.insert_stmt.values_list = values_list;
