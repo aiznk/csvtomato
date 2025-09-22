@@ -1,5 +1,5 @@
 CC := gcc
-PROG_FLAGS_MEM := -I. -Wall -g -O0 -std=c11 -pedantic-errors -fsanitize=address
+PROG_FLAGS_MEM := -I. -Wall -g -O0 -std=c11 -pedantic-errors -fsanitize=address -Wformat-truncation=0
 PROG_FLAGS := -I. -Wall -g -O0 -std=c11 -pedantic-errors
 SO_FLAGS := -O2 -std=c11 -pedantic-errors
 SO := csvtomato.so

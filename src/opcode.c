@@ -219,28 +219,30 @@ opcode_insert_stmt(
 		}
 	}
 
-	{
-		CsvTomatoOpcodeElem elem = {
-			.kind = CSVTMT_OP_VALUES_BEG,
-		};
-		push(self, elem, error);
-		if (error->error) {
-			return;
+	for (CsvTomatoNode *values = node->obj.insert_stmt.values_list; values; values = values->next) {
+		{
+			CsvTomatoOpcodeElem elem = {
+				.kind = CSVTMT_OP_VALUES_BEG,
+			};
+			push(self, elem, error);
+			if (error->error) {
+				return;
+			}
 		}
-	}
 
-	opcode_values(self, node->obj.insert_stmt.values_list, error);
-	if (error->error) {
-		return;
-	}
-
-	{
-		CsvTomatoOpcodeElem elem = {
-			.kind = CSVTMT_OP_VALUES_END,
-		};
-		push(self, elem, error);
+		opcode_values(self, values, error);
 		if (error->error) {
 			return;
+		}		
+
+		{
+			CsvTomatoOpcodeElem elem = {
+				.kind = CSVTMT_OP_VALUES_END,
+			};
+			push(self, elem, error);
+			if (error->error) {
+				return;
+			}
 		}
 	}
 
