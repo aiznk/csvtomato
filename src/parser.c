@@ -1,4 +1,4 @@
-#include "csvtomato.h"
+#include <csvtomato.h>
 
 CsvTomatoNode *
 csvtmt_node_new(CsvTomatoNodeKind kind, CsvTomatoError *error) {
@@ -58,15 +58,21 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 		free(self->obj.insert_stmt.table_name);
 
 		for (CsvTomatoNode *cur = self->obj.insert_stmt.column_name_list; cur; ) {
-			csvtmt_node_del_all(cur);
+			CsvTomatoNode *rm = cur;
+			cur = cur->next;
+			csvtmt_node_del_all(rm);
 		}
 		for (CsvTomatoNode *cur = self->obj.insert_stmt.values_list; cur; ) {
-			csvtmt_node_del_all(cur);
+			CsvTomatoNode *rm = cur;
+			cur = cur->next;
+			csvtmt_node_del_all(rm);
 		}
 		break;
 	case CSVTMT_ND_VALUES:
 		for (CsvTomatoNode *cur = self->obj.values.expr_list; cur; ) {
-			csvtmt_node_del_all(cur);
+			CsvTomatoNode *rm = cur;
+			cur = cur->next;
+			csvtmt_node_del_all(rm);
 		}		
 		break;
 	case CSVTMT_ND_EXPR:
@@ -479,6 +485,7 @@ parse_insert_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError 
 	if (error->error) {
 		goto fail;
 	}
+	next(token);
 
 	if (kind(token) == CSVTMT_TK_BEG_PAREN) {
 		// [ '(' column_name ( ',' column_name ) * ')' ]
@@ -517,6 +524,7 @@ parse_insert_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError 
 		}
 		next(token);
 
+		assert(column_name_list);
 		n1->obj.insert_stmt.column_name_list = column_name_list;
 	}
 
@@ -573,6 +581,7 @@ parse_column_name(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError 
 	if (error->error) {
 		goto fail;
 	}
+	next(token);
 
 	return n1;
 fail:
@@ -683,6 +692,7 @@ parse_number(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *erro
 	} else {
 		goto fail;
 	}
+	next(token);
 	
 	return n1;
 fail:
@@ -705,6 +715,7 @@ parse_string(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *erro
 	} else {
 		goto fail;
 	}
+	next(token);
 
 	return n1;
 fail:

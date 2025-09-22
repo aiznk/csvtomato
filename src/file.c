@@ -1,4 +1,40 @@
-#include "csvtomato.h"
+#include <csvtomato.h>
+
+/// touch 相当の処理
+/// 成功: 0, 失敗: -1
+int csvtmt_file_touch(const char *path) {
+    if (!path || !*path) return -1;
+
+    if (!csvtmt_file_exists(path)) {
+        // ファイルが存在しない場合 → 新規作成
+        FILE *fp = fopen(path, "wb");
+        if (!fp) return -1;
+        fclose(fp);
+        return 0;
+    }
+
+    // ファイルが存在する場合 → タイムスタンプ更新
+#ifdef _WIN32
+    HANDLE hFile = CreateFileA(path,
+                               FILE_WRITE_ATTRIBUTES,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                               NULL,
+                               OPEN_EXISTING,
+                               FILE_ATTRIBUTE_NORMAL,
+                               NULL);
+    if (hFile == INVALID_HANDLE_VALUE) return -1;
+
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft); // 現在時刻を取得
+    int ret = SetFileTime(hFile, NULL, &ft, &ft) ? 0 : -1;
+
+    CloseHandle(hFile);
+    return ret;
+#else
+    // utime(NULL) で現在時刻に更新
+    return utime(path, NULL);
+#endif
+}
 
 /// ファイルまたはディレクトリが存在するかを確認
 int csvtmt_file_exists(const char *path) {
