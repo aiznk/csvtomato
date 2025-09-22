@@ -331,8 +331,18 @@ typedef struct {
 } CsvTomatoValue;
 
 typedef struct {
+	bool integer;
+	bool text;
+	bool not_null;
+	bool null;
+	bool primary_key;
+	bool autoincrement;
+} CsvTomatoColumnTypeDef;
+
+typedef struct {
 	char type_name[CSVTMT_TYPE_NAME_SIZE];
 	char type_def[CSVTMT_TYPE_DEF_SIZE];
+	CsvTomatoColumnTypeDef type_def_info;
 	size_t index;
 } CsvTomatoColumnType;
 

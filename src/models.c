@@ -1,16 +1,36 @@
 #include <csvtomato.h>
 
+void
+type_parse_type_def(CsvTomatoColumnType *self, const char *type_def, CsvTomatoError *error) {
+	if (strstr(type_def, "INTEGER")) {
+		self->type_def_info.integer =  true;
+	} else if (strstr(type_def, "TEXT")) {
+		self->type_def_info.text = true;
+	}
+	if (strstr(type_def, "PRIMARY KEY")) {
+		self->type_def_info.primary_key = true;
+	}
+	if (strstr(type_def, "AUTOINCREMENT")) {
+		self->type_def_info.autoincrement = true;
+	}
+	if (strstr(type_def, "NOT NULL")) {
+		self->type_def_info.not_null = true;
+	} else if (strstr(type_def, "NULL")) {
+		self->type_def_info.null = true;
+	}
+}
+
 // id INTEGER PRIMARY KEY AUTOINCREMENT
 // name TEXT NOT NULL
 // とかがCSVヘッダカラム。idやnameをtype_nameに、それ以降をtype_defに格納。
 void
-parse_type_column(CsvTomatoColumnType *type, const char *col, CsvTomatoError *error) {
-	char *name = type->type_name;
+type_parse_column(CsvTomatoColumnType *self, const char *col, CsvTomatoError *error) {
+	char *name = self->type_name;
 	size_t name_len = 0;
-	size_t name_size = sizeof(type->type_name);
-	char *def = type->type_def;
+	size_t name_size = sizeof(self->type_name);
+	char *def = self->type_def;
 	size_t def_len = 0;
-	size_t def_size = sizeof(type->type_def);
+	size_t def_size = sizeof(self->type_def);
 	int m = 0;
 
 	for (const char *p = col; *p; p++) {
@@ -49,6 +69,11 @@ parse_type_column(CsvTomatoColumnType *type, const char *col, CsvTomatoError *er
 		}
 	}
 
+	type_parse_type_def(self, def, error);
+	if (error->error) {
+		return;
+	}
+
 	return;
 overflow:
 	csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "buffer overflow in parse type column");
@@ -80,7 +105,7 @@ header_read(CsvTomatoHeader *self, const char *table_path, CsvTomatoError *error
 		}
 		CsvTomatoColumnType *type = &self->types[self->types_len++];
 		type->index = i;
-		parse_type_column(type, row.columns[i], error);
+		type_parse_column(type, row.columns[i], error);
 		if (error->error) {
 			return;	
 		}
@@ -147,6 +172,9 @@ gen_auto_increment_id(
 
 	fgets(line, sizeof line, id_fp);
 	id = atoi(line);
+	if (id == 0) {
+		id = 1;
+	}
 
 	fseek(id_fp, 0, SEEK_SET);
 	fprintf(id_fp, "%ld", id+1);
@@ -169,13 +197,13 @@ type_gen_column_default_value(
 	CsvTomatoError *error
 ) {
 	assert(dst_size >= 2);
-	const char *s = type->type_def;
-	printf("type_name[%s] type_def[%s]\n", type->type_name, s);
+	const CsvTomatoColumnTypeDef *info = &type->type_def_info;
+	// printf("type_name[%s] type_def[%s]\n", type->type_name, type->type_def);
 
 	if (!strcmp(type->type_name, CSVTMT_COL_MODE)) {
 		strcpy(dst, "0");
-	} else if (strstr(s, "INTEGER")) {
-		if (strstr(s, "AUTOINCREMENT")) {
+	} else if (info->integer) {
+		if (info->autoincrement) {
 			uint64_t id = gen_auto_increment_id(model, type->type_name, error);
 			if (error->error) {
 				goto fail_gen_id;
@@ -184,7 +212,7 @@ type_gen_column_default_value(
 		} else {
 			strcpy(dst, "0");
 		}
-	} else if (strstr(s, "TEXT")) {
+	} else if (info->text) {
 		strcpy(dst, "");
 	} else {
 		goto invalid_type_def;
