@@ -479,12 +479,18 @@ replace_update(CsvTomatoModel *model, CsvTomatoError *error) {
 	size_t nline = 0;
 
 	for (;; nline++) {
+		csvtmt_csvline_destroy(&row);
 		int ret = csvtmt_csvline_parse_stream(&row, fin, error);
 		if (error->error) {
 			goto failed_to_parse_stream;
 		}
 		if (ret == EOF) {
 			break;
+		}
+
+		// csvtmt_csvline_show(&row);
+		if (row.len && !strcmp(row.columns[0], "1")) {
+			continue; // this row deleted
 		}
 
 		if (nline != 0) {
@@ -682,6 +688,7 @@ csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error) {
 		if (error->error) {
 			goto failed_to_parse_csv;
 		}
+		csvtmt_csvline_destroy(&row);
 
 		// CSVファイルを走査して、indicesの列の値がkvsのvalueと
 		// 一致しているか見る。一致していればWHEREにマッチしている行と見なす。

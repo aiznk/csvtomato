@@ -676,6 +676,9 @@ csvtmt_strlist_move_back_str(
 // csv.c
 
 void
+csvtmt_csvline_show(CsvTomatoCsvLine *self);
+
+void
 csvtmt_csvline_set_clone(
 	CsvTomatoCsvLine *self,
 	size_t index,

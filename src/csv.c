@@ -1,5 +1,13 @@
 #include <csvtomato.h>
 
+void
+csvtmt_csvline_show(CsvTomatoCsvLine *self) {
+	for (size_t i = 0; i < self->len; i++) {
+		printf("[%s]", self->columns[i]);
+	}
+	printf("\n");
+}
+
 const char *
 csvtmt_csvline_parse_string(
 	CsvTomatoCsvLine *self,
