@@ -226,10 +226,6 @@ struct CsvTomatoError {
 	char message[CSVTMT_ERR_MSG_SIZE];
 };
 
-struct CsvTomato {
-	char db_dir[CSVTMT_STR_SIZE];
-};
-
 struct CsvTomatoStmt {
 	int a;
 };
@@ -483,6 +479,16 @@ struct CsvTomatoModel {
 	size_t stack_len;
 };
 
+struct CsvTomato {
+	CsvTomatoTokenizer *tokenizer;
+	CsvTomatoParser *parser;
+	CsvTomatoExecutor *executor;
+	CsvTomatoOpcode *opcode;
+	CsvTomatoToken *token;
+	CsvTomatoNode *node;
+	CsvTomatoModel model;
+};
+
 /*************
 * prototypes *
 *************/
@@ -648,7 +654,6 @@ void
 csvtmt_executor_exec(
 	CsvTomatoExecutor *self,
 	CsvTomatoModel *model,
-	const char *db_dir,
 	const CsvTomatoOpcodeElem *opcodes,
 	size_t opcodes_len,
 	CsvTomatoError *error
