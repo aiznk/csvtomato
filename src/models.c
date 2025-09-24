@@ -65,7 +65,12 @@ type_parse_type_def(CsvTomatoColumnType *self, const char *type_def, CsvTomatoEr
 // name TEXT NOT NULL
 // とかがCSVヘッダカラム。idやnameをtype_nameに、それ以降をtype_defに格納。
 void
-type_parse_column(CsvTomatoColumnType *self, const char *col, CsvTomatoError *error) {
+type_parse_column(
+	CsvTomatoColumnType *self,
+	const char *col,
+	size_t index,
+	CsvTomatoError *error
+) {
 	char *name = self->type_name;
 	size_t name_len = 0;
 	size_t name_size = sizeof(self->type_name);
@@ -73,6 +78,8 @@ type_parse_column(CsvTomatoColumnType *self, const char *col, CsvTomatoError *er
 	size_t def_len = 0;
 	size_t def_size = sizeof(self->type_def);
 	int m = 0;
+
+	self->index = index;
 
 	for (const char *p = col; *p; p++) {
 		switch (m) {
@@ -145,7 +152,7 @@ header_read_from_table(CsvTomatoHeader *self, const char *table_path, CsvTomatoE
 		}
 		CsvTomatoColumnType *type = &self->types[self->types_len++];
 		type->index = i;
-		type_parse_column(type, row.columns[i], error);
+		type_parse_column(type, row.columns[i], i, error);
 		if (error->error) {
 			return;	
 		}
@@ -786,6 +793,7 @@ csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error) {
 		CsvTomatoValues *values = &model->values[i];
 
 		if (values->len != model->column_names_len) {
+			printf("%ld %ld %ld\n", model->values_len, values->len, model->column_names_len);
 			goto invalid_values_len;
 		}
 
@@ -823,8 +831,12 @@ csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error) {
 				csvtmt_str_append(model->buf, col);
 			} else {
 				// values_indexはカラムに含まれている。
+				if (values_index >= values->len) {
+					goto values_index_out_of_ragen;
+				}
 				const CsvTomatoValue *value = &values->values[values_index];
 				char buf[1024];
+				// printf("value %d\n", value->kind);
 
 				switch (value->kind) {
 				default: goto invalid_value_kind; break;
@@ -864,10 +876,14 @@ invalid_column:
 	return;
 invalid_values_len:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid values length. column names len is \"%ld\" but values length is \"%ld\"", model->column_names_len, model->values_len);
+	return;
 invalid_value_kind:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid value kind");
 	return;
 failed_to_open_table:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to open table %s. %s", model->table_path, strerror(errno));
+	return;
+values_index_out_of_ragen:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "values index out of range");
 	return;
 }

@@ -63,6 +63,8 @@ csvtmt_executor_exec(
 		dst = model->stack[--model->stack_len];\
 	}\
 
+	memset(model, 0, sizeof(*model));
+
 	snprintf(model->db_dir, sizeof model->db_dir, "%s", db_dir);
 	model->buf = csvtmt_str_new();
 	if (!model->buf) {
@@ -170,9 +172,11 @@ csvtmt_executor_exec(
 				}
 
 				values->len++;				
+				// printf("values->len %ld\n", values->len);
 			}
 
 			model->values_len++;
+			// printf("values_len %ld\n", model->values_len);
 		} break;
 		case CSVTMT_OP_UPDATE_SET_BEG: {
 			model->update_set_key_values_len = 0;

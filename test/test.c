@@ -365,8 +365,8 @@ test_executor(void) {
 
 	#undef clear
 	#define clear(table_name) {\
-		FILE *fp = fopen("test_db/" table_name ".csv", "w");\
-		fclose(fp);\
+		csvtmt_file_remove("test_db/" table_name ".csv");\
+		csvtmt_file_remove("test_db/id/" table_name "__id.txt");\
 	}\
 
 	#undef exec
@@ -384,8 +384,10 @@ test_executor(void) {
 		char buf[1024];\
 		size_t n = fread(buf, sizeof(buf[0]), 1024-1, fp);\
 		buf[n] = 0;\
-		printf("buf[%s]\n", buf);\
-		assert(!strcmp(buf, hope));\
+		if (strcmp(buf, hope)) {\
+			printf("buf[%s]\n", buf);\
+			assert(!strcmp(buf, hope));\
+		}\
 		fclose(fp);\
 		cleanup();\
 	}\
@@ -412,7 +414,7 @@ test_executor(void) {
 		csvtmt_file_mkdir("test_db");
 	}
 
-	// clear("users");
+	clear("users");
 	exec(
 		"CREATE TABLE IF NOT EXISTS users ("
 		"	id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -429,15 +431,26 @@ test_executor(void) {
 	// 	");",
 	// 	"table users already exists"
 	// );
-	// exec(
-	// 	"INSERT INTO users (name, age) VALUES (\"Alice\", 20);"
-	// );
-	// exec(
-	// 	"INSERT INTO users (name, age) VALUES (\"Hanako\", 123), (\"Taro\", 223)"
-	// );
-	// exec(
-	// 	"UPDATE users SET age = 123, id = 3 WHERE id = 14;"
-	// );
+	exec(
+		"INSERT INTO users (name, age) VALUES (\"Alice\", 20);",
+		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
+		"0,1,Alice,20\n"
+	);
+	exec(
+		"INSERT INTO users (name, age) VALUES (\"Hanako\", 123), (\"Taro\", 223)",
+		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
+		"0,1,Alice,20\n"
+		"0,2,Hanako,123\n"
+		"0,3,Taro,223\n"
+	);
+	exec(
+		"UPDATE users SET age = 200, name = \"Tamako\" WHERE id = 2;",
+		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
+		"0,1,Alice,20\n"
+		"1,2,Hanako,123\n"
+		"0,3,Taro,223\n"		
+		"0,2,Tamako,200\n"
+	);
 	// exec(
 	// 	"UPDATE users SET age = 123, id = 3",
 	// );

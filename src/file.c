@@ -87,3 +87,8 @@ int csvtmt_file_mkdir(const char *path) {
     }
     return 0;
 }
+
+int 
+csvtmt_file_remove(const char *path) {
+    return remove(path);
+}
