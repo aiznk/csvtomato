@@ -1,5 +1,10 @@
 #include <csvtomato.h>
 
+int
+csvtmt_file_rename(const char *old, const char *new) {
+    return rename(old, new);
+}
+
 /// touch 相当の処理
 /// 成功: 0, 失敗: -1
 int csvtmt_file_touch(const char *path) {

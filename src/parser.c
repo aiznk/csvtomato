@@ -44,6 +44,7 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 		// puts("CSVTMT_ND_STMT");
 		csvtmt_node_del_all(self->obj.sql_stmt.create_table_stmt);
 		csvtmt_node_del_all(self->obj.sql_stmt.insert_stmt);
+		csvtmt_node_del_all(self->obj.sql_stmt.update_stmt);
 		break;
 	case CSVTMT_ND_CREATE_TABLE_STMT:
 		// puts("CSVTMT_ND_CREATE_TABLE_STMT");
@@ -68,6 +69,17 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 			csvtmt_node_del_all(rm);
 		}
 		break;
+	case CSVTMT_ND_UPDATE_STMT:
+		free(self->obj.update_stmt.table_name);
+
+		for (CsvTomatoNode *cur = self->obj.update_stmt.assign_expr_list; cur; ) {
+			CsvTomatoNode *rm = cur;
+			cur = cur->next;
+			csvtmt_node_del_all(rm);
+		}
+
+		csvtmt_node_del_all(self->obj.update_stmt.where_expr);
+		break;
 	case CSVTMT_ND_VALUES:
 		for (CsvTomatoNode *cur = self->obj.values.expr_list; cur; ) {
 			CsvTomatoNode *rm = cur;
@@ -76,8 +88,13 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 		}		
 		break;
 	case CSVTMT_ND_EXPR:
+		csvtmt_node_del_all(self->obj.expr.assign_expr);
 		csvtmt_node_del_all(self->obj.expr.number);
 		csvtmt_node_del_all(self->obj.expr.string);
+		break;
+	case CSVTMT_ND_ASSIGN_EXPR:
+		free(self->obj.assign_expr.ident);
+		csvtmt_node_del_all(self->obj.assign_expr.expr);
 		break;
 	case CSVTMT_ND_STRING:
 		free(self->obj.string.string);
@@ -125,6 +142,7 @@ static CsvTomatoNode *parse_sql_stmt_list(CsvTomatoParser *self, CsvTomatoToken 
 static CsvTomatoNode *parse_sql_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_create_table_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_insert_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
+static CsvTomatoNode *parse_update_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_column_name(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_values(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_expr(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
@@ -132,6 +150,8 @@ static CsvTomatoNode *parse_number(CsvTomatoParser *self, CsvTomatoToken **token
 static CsvTomatoNode *parse_string(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_column_def(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_column_constraint(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
+static CsvTomatoNode *
+parse_assign_expr(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 
 static void
 node_push(CsvTomatoNode *node, CsvTomatoNode *n);
@@ -250,6 +270,14 @@ parse_sql_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *er
 		goto fail;
 	}
 	if (n1->obj.sql_stmt.insert_stmt) {
+		return n1;
+	}
+
+	n1->obj.sql_stmt.update_stmt = parse_update_stmt(self, token, error);
+	if (error->error) {
+		goto fail;
+	}
+	if (n1->obj.sql_stmt.update_stmt) {
 		return n1;
 	}
 
@@ -458,6 +486,103 @@ fail:
 	return NULL;
 }
 
+// UPDATE table_name SET assign_expr ( ',' assign_expr ) * [ WHERE assign_expr ]
+static CsvTomatoNode *
+parse_update_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error) {
+	if (is_end(token)) {
+		return NULL;
+	}
+
+	CsvTomatoNode *n1 = csvtmt_node_new(CSVTMT_ND_UPDATE_STMT, error);
+	if (error->error) {
+		return NULL;
+	}
+
+	// UPDATE
+	if (kind(token) != CSVTMT_TK_UPDATE) {
+		goto ret_null;
+	} else {
+		next(token);
+	}
+
+	// table_name
+	if (kind(token) != CSVTMT_TK_IDENT) {
+		goto not_found_table_name;
+	} else {
+		n1->obj.update_stmt.table_name = csvtmt_strdup(text(token), error);
+		if (!n1->obj.update_stmt.table_name) {
+			goto fail_allocate;
+		}
+		next(token);
+	}
+
+	// SET
+	if (kind(token) != CSVTMT_TK_SET) {
+		goto not_found_set;
+	} else {
+		next(token);
+	}
+
+	// assign_expr_list 
+	CsvTomatoNode *assign_expr_list = parse_assign_expr(self, token, error);
+	if (error->error || !assign_expr_list) {
+		goto fail_parse_assign_expr;
+	}
+
+	for (; !is_end(token); ) {
+		if (kind(token) != CSVTMT_TK_COMMA) {
+			break;
+		} else {
+			next(token);
+		}
+
+		CsvTomatoNode *assign_expr = parse_assign_expr(self, token, error);
+		if (error->error || !assign_expr) {
+			goto fail_parse_assign_expr;
+		}
+
+		node_push(assign_expr_list, assign_expr);
+	}
+
+	n1->obj.update_stmt.assign_expr_list = assign_expr_list;
+
+	// WHERE assign_expr
+	if (kind(token) == CSVTMT_TK_WHERE) {
+		next(token);
+
+		n1->obj.update_stmt.where_expr = parse_expr(self, token, error);
+		if (error->error || !n1->obj.update_stmt.where_expr) {
+			goto fail_parse_where_expr;
+		}
+	}
+
+	return n1;
+
+ret_null:
+	csvtmt_node_del_all(n1);
+	return NULL;
+not_found_set:
+	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found SET on update statement");
+	csvtmt_node_del_all(n1);
+	return NULL;	
+not_found_table_name:
+	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found table name on update statement");
+	csvtmt_node_del_all(n1);
+	return NULL;	
+fail_parse_assign_expr:
+	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "failed to parse assign expression on update statement");
+	csvtmt_node_del_all(n1);
+	return NULL;	
+fail_parse_where_expr:
+	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "failed to parse WHERE expression on update statement");
+	csvtmt_node_del_all(n1);
+	return NULL;	
+fail_allocate:
+	csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
+	csvtmt_node_del_all(n1);
+	return NULL;	
+}
+
 static CsvTomatoNode *
 parse_insert_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error) {
 	if (kind(token) != CSVTMT_TK_INSERT) {
@@ -646,6 +771,59 @@ fail:
 }
 
 static CsvTomatoNode *
+parse_assign_expr(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error) {
+	if (is_end(token)) {
+		return NULL;
+	}
+	
+	CsvTomatoNode *n1 = csvtmt_node_new(CSVTMT_ND_ASSIGN_EXPR, error);
+	if (error->error) {
+		return NULL;
+	}	
+
+	if (kind(token) != CSVTMT_TK_IDENT) {
+		goto ret_null;
+	} else {
+		n1->obj.assign_expr.ident = csvtmt_strdup(text(token), error);
+		if (!n1->obj.assign_expr.ident) {
+			goto fail_allocate;
+		}
+		next(token);
+	}
+
+	if (kind(token) != CSVTMT_TK_ASSIGN) {
+		goto not_found_assign;
+	} else {
+		next(token);
+	}
+
+	n1->obj.assign_expr.expr = parse_expr(self, token, error);
+	if (error->error) {
+		goto fail_parse_expr;
+	}
+	if (!n1->obj.assign_expr.expr) {
+		goto fail_parse_expr;
+	}
+
+	return n1;
+ret_null:
+	csvtmt_node_del_all(n1);
+	return NULL;
+not_found_assign:
+	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found assign in assign expr");
+	csvtmt_node_del_all(n1);
+	return NULL;
+fail_parse_expr:
+	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "failed to parse expr in assign expr");
+	csvtmt_node_del_all(n1);
+	return NULL;
+fail_allocate:
+	csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
+	csvtmt_node_del_all(n1);
+	return NULL;
+}
+
+static CsvTomatoNode *
 parse_expr(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error) {
 	CsvTomatoNode *n1 = csvtmt_node_new(CSVTMT_ND_EXPR, error);
 	if (error->error) {
@@ -654,25 +832,35 @@ parse_expr(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error)
 
 	CsvTomatoNode *n2;
 
+	n2 = parse_assign_expr(self, token, error);
+	if (error->error) {
+		goto fail;
+	}
+	if (n2) {
+		n1->obj.expr.assign_expr = n2;
+		return n1;
+	}
+
 	n2 = parse_number(self, token, error);
 	if (error->error) {
 		goto fail;
 	}
 	if (n2) {
 		n1->obj.expr.number = n2;
-	} else {
-		n2 = parse_string(self, token, error);
-		if (error->error) {
-			goto fail;
-		}
-		if (n2) {
-			n1->obj.expr.string = n2;
-		} else {
-			goto fail;
-		}
+		return n1;
 	}
 
-	return n1;
+	n2 = parse_string(self, token, error);
+	if (error->error) {
+		goto fail;
+	}
+	if (n2) {
+		n1->obj.expr.string = n2;
+		return n1;
+	} else {
+		goto fail;
+	}
+
 fail:
 	csvtmt_node_del_all(n1);
 	return NULL;

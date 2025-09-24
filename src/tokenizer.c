@@ -90,8 +90,11 @@ tokenize_ident(CsvTomatoTokenizer *self, CsvTomatoError *error) {
 
 	if (!strcasecmp(tok->text, "create")) tok->kind = CSVTMT_TK_CREATE;
 	else if (!strcasecmp(tok->text, "select")) tok->kind = CSVTMT_TK_SELECT;
+	else if (!strcasecmp(tok->text, "update")) tok->kind = CSVTMT_TK_UPDATE;
+	else if (!strcasecmp(tok->text, "set")) tok->kind = CSVTMT_TK_SET;
 	else if (!strcasecmp(tok->text, "insert")) tok->kind = CSVTMT_TK_INSERT;
 	else if (!strcasecmp(tok->text, "into")) tok->kind = CSVTMT_TK_INTO;
+	else if (!strcasecmp(tok->text, "where")) tok->kind = CSVTMT_TK_WHERE;
 	else if (!strcasecmp(tok->text, "values")) tok->kind = CSVTMT_TK_VALUES;
 	else if (!strcasecmp(tok->text, "table")) tok->kind = CSVTMT_TK_TABLE;
 	else if (!strcasecmp(tok->text, "if")) tok->kind = CSVTMT_TK_IF;
