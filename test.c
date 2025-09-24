@@ -1,4 +1,4 @@
-#include "../csvtomato.h"
+#include "csvtomato.h"
 #include <assert.h>
 
 #undef clear
@@ -540,10 +540,10 @@ test_executor(void) {
 int 
 main(void) {
 	test_tomato();	
-	// test_csv();
-	// test_tokenizer();
-	// test_parser();
-	// test_opcode();
-	// test_executor();
+	test_csv();
+	test_tokenizer();
+	test_parser();
+	test_opcode();
+	test_executor();
 	return 0;
 }
