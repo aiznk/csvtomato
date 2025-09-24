@@ -477,6 +477,9 @@ struct CsvTomatoModel {
 // error.c 
 
 void
+csvtmt_error_clear(CsvTomatoError *self);
+
+void
 csvtmt_error_format(
 	CsvTomatoError *self,
 	CsvTomatoErrorKind kind,
