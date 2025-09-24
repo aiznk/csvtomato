@@ -26,6 +26,7 @@ DECL_STRING(CsvTomatoString, csvtmt_str, char)
     #include <unistd.h>
     #include <utime.h>
 	#include <fcntl.h>
+	#include <signal.h>
     #define CSVTMT_MKDIR(path) mkdir(path, 0755)
 #endif
 
@@ -638,6 +639,9 @@ csvtmt_executor_exec(
 );
 
 // file.c
+
+int 
+csvtmt_file_remove(const char *path);
 
 int
 csvtmt_file_exists(const char *path);
