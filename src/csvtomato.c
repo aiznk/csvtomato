@@ -1,5 +1,27 @@
 #include <csvtomato.h>
 
+CsvTomatoStmt *
+csvtmt_stmt_new(CsvTomatoError *error) {
+	CsvTomatoStmt *self = calloc(1, sizeof(*self));
+	if (!self) {
+		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory");
+		return NULL;
+	}
+
+	return self;
+}
+
+void
+csvtmt_stmt_del(CsvTomatoStmt *self) {
+	csvtmt_token_del_all(self->token);
+	csvtmt_node_del_all(self->node);
+	csvtmt_parser_del(self->parser);
+	csvtmt_tokenizer_del(self->tokenizer);
+	csvtmt_opcode_del(self->opcode);
+	csvtmt_executor_del(self->executor);
+	free(self);
+}
+
 CsvTomato *
 csvtmt_open(
 	const char *db_dir,
@@ -66,16 +88,28 @@ csvtmt_execute(
 		query,
 		error
 	);
+	if (error->error) {
+		return;
+	}
+
 	self->node = csvtmt_parser_parse(
 		self->parser,
 		self->token,
 		error
 	);
+	if (error->error) {
+		return;
+	}
+
 	csvtmt_opcode_parse(
 		self->opcode,
 		self->node,
 		error
 	);
+	if (error->error) {
+		return;
+	}
+
 	csvtmt_executor_exec(
 		self->executor,
 		&self->model,
@@ -83,16 +117,79 @@ csvtmt_execute(
 		self->opcode->len,
 		error
 	);
+	if (error->error) {
+		return;
+	}
 }
 
 void
 csvtmt_prepare(
-	CsvTomato *db, 
+	CsvTomato *self, 
 	const char *query, 
 	CsvTomatoStmt **stmt, 
 	CsvTomatoError *error
 ) {
+	if (*stmt) {
+		csvtmt_stmt_del(*stmt);
+		*stmt = csvtmt_stmt_new(error);
+		if (error->error) {
+			return;
+		}
+	}
 
+	CsvTomatoStmt *s = *stmt;
+	
+	s->tokenizer = csvtmt_tokenizer_new(error);
+	if (error->error) {
+		goto fail;
+	}
+
+	s->parser = csvtmt_parser_new(error);
+	if (error->error) {
+		goto fail;
+	}
+
+	s->opcode = csvtmt_opcode_new(error);
+	if (error->error) {
+		goto fail;		
+	}
+
+	s->executor = csvtmt_executor_new(error);
+	if (error->error) {
+		goto fail;		
+	}
+
+	self->token = csvtmt_tokenizer_tokenize(
+		self->tokenizer,
+		query,
+		error
+	);
+	if (error->error) {
+		goto fail;		
+	}
+
+	self->node = csvtmt_parser_parse(
+		self->parser,
+		self->token,
+		error
+	);
+	if (error->error) {
+		goto fail;		
+	}
+
+	csvtmt_opcode_parse(
+		self->opcode,
+		self->node,
+		error
+	);
+	if (error->error) {
+		goto fail;
+	}
+
+	return;
+fail:
+	csvtmt_stmt_del(*stmt);
+	return;
 }
 
 void

@@ -537,6 +537,15 @@ opcode_expr(
 	if (error->error) {
 		return;
 	}
+
+	if (node->obj.expr.place_holder) {
+		CsvTomatoOpcodeElem elem = {0};
+		elem.kind = CSVTMT_OP_PLACE_HOLDER;
+		push(self, elem, error);
+		if (error->error) {
+			return;
+		}
+	}
 }
 
 static void

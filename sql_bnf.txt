@@ -39,7 +39,8 @@ values ::=
 expr ::=
 	assign_expr |
 	digit |
-	string
+	string |
+	place_holder
 
 assign_expr ::=
 	ident '=' expr	

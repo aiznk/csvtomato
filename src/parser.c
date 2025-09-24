@@ -937,6 +937,11 @@ parse_expr(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error)
 		goto fail;
 	}
 
+	if (kind(token) == CSVTMT_TK_PLACE_HOLDER) {
+		next(token);
+		n1->obj.expr.place_holder = true;
+	}
+
 fail:
 	csvtmt_node_del_all(n1);
 	return NULL;

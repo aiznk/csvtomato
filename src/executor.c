@@ -87,6 +87,9 @@ csvtmt_executor_exec(
 			op_kind = op->kind;
 			goto invalid_op_kind;
 			break;
+		case CSVTMT_OP_PLACE_HOLDER: {
+			goto found_place_holder;
+		} break;
 		case CSVTMT_OP_IDENT: {
 			CsvTomatoStackElem elem = {0};
 			elem.kind = CSVTMT_STACK_ELEM_IDENT;
@@ -373,6 +376,10 @@ csvtmt_executor_exec(
 		}
 	}
 
+	cleanup();
+	return;
+found_place_holder:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "found place holder");
 	cleanup();
 	return;
 table_already_exists:
