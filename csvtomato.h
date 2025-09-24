@@ -22,8 +22,10 @@ DECL_STRING(CsvTomatoString, csvtmt_str, char)
 #else
     #include <sys/stat.h>
     #include <sys/types.h>
+	#include <sys/mman.h>
     #include <unistd.h>
     #include <utime.h>
+	#include <fcntl.h>
     #define CSVTMT_MKDIR(path) mkdir(path, 0755)
 #endif
 
@@ -42,6 +44,8 @@ enum {
 	CSVTMT_TYPE_NAME_SIZE = 256,
 	CSVTMT_TYPE_DEF_SIZE = 256,
 	CSVTMT_CSV_COLS_SIZE = 128,
+	CSVTMT_EXEC_STACK_SIZE = 256,
+	CSVTMT_ASSIGNS_ARRAY_SIZE = 128,
 };
 
 typedef enum {
@@ -74,6 +78,9 @@ typedef enum {
 	CSVTMT_TK_CREATE,
 	CSVTMT_TK_SELECT,
 	CSVTMT_TK_INSERT,
+	CSVTMT_TK_UPDATE,
+	CSVTMT_TK_SET,
+	CSVTMT_TK_WHERE,
 	CSVTMT_TK_INTO,
 	CSVTMT_TK_VALUES,
 	CSVTMT_TK_TABLE,
@@ -94,8 +101,10 @@ typedef enum {
 	CSVTMT_ND_STMT,
 	CSVTMT_ND_CREATE_TABLE_STMT,
 	CSVTMT_ND_INSERT_STMT,
+	CSVTMT_ND_UPDATE_STMT,
 	CSVTMT_ND_VALUES,
 	CSVTMT_ND_EXPR,
+	CSVTMT_ND_ASSIGN_EXPR,
 	CSVTMT_ND_NUMBER,
 	CSVTMT_ND_STRING,
 	CSVTMT_ND_COLUMN_NAME,
@@ -109,8 +118,16 @@ typedef enum {
 	CSVTMT_OP_CREATE_TABLE_STMT_END,
 	CSVTMT_OP_INSERT_STMT_BEG,
 	CSVTMT_OP_INSERT_STMT_END,
+	CSVTMT_OP_UPDATE_STMT_BEG,
+	CSVTMT_OP_UPDATE_STMT_END,
+	CSVTMT_OP_UPDATE_SET_BEG,
+	CSVTMT_OP_UPDATE_SET_END,
+	CSVTMT_OP_UPDATE_WHERE_BEG,
+	CSVTMT_OP_UPDATE_WHERE_END,
 	CSVTMT_OP_COLUMN_NAMES_BEG,
 	CSVTMT_OP_COLUMN_NAMES_END,
+	CSVTMT_OP_ASSIGN,
+	CSVTMT_OP_IDENT,
 	CSVTMT_OP_VALUES_BEG,
 	CSVTMT_OP_VALUES_END,
 	CSVTMT_OP_INT_VALUE,
@@ -187,6 +204,12 @@ typedef struct CsvTomatoValues CsvTomatoValues;
 struct CsvTomatoModel;
 typedef struct CsvTomatoModel CsvTomatoModel;
 
+struct CsvTomatoStackElem;
+typedef struct CsvTomatoStackElem CsvTomatoStackElem;
+
+struct CsvTomatoKeyValue;
+typedef struct CsvTomatoKeyValue CsvTomatoKeyValue;
+
 /**********
 * structs *
 **********/
@@ -236,6 +259,7 @@ struct CsvTomatoNode {
 		struct {
 			struct CsvTomatoNode *create_table_stmt;
 			struct CsvTomatoNode *insert_stmt;
+			struct CsvTomatoNode *update_stmt;
 		} sql_stmt;
 		struct {
 			char *table_name;
@@ -248,15 +272,25 @@ struct CsvTomatoNode {
 			struct CsvTomatoNode *values_list;
 		} insert_stmt;
 		struct {
+			char *table_name;
+			struct CsvTomatoNode *assign_expr_list;
+			struct CsvTomatoNode *where_expr;
+		} update_stmt;
+		struct {
 			char *column_name;
 		} column_name;
 		struct {
 			struct CsvTomatoNode *expr_list;
 		} values;
 		struct {
+			struct CsvTomatoNode *assign_expr;
 			struct CsvTomatoNode *number;
 			struct CsvTomatoNode *string;
 		} expr;
+		struct {
+			char *ident;
+			struct CsvTomatoNode *expr;
+		} assign_expr;
 		struct {
 			int64_t int_value;
 			double float_value;
@@ -302,6 +336,12 @@ struct CsvTomatoOpcodeElem {
 			char *table_name;
 		} insert_stmt;
 		struct {
+			char *table_name;
+		} update_stmt;
+		struct {
+			char *value;
+		} ident;
+		struct {
 			char *value;
 		} string_value;
 		struct {
@@ -322,14 +362,17 @@ struct CsvTomatoOpcodeElem {
 	} obj;
 };
 
-struct CsvTomatoExecutor {
-	int a;
-};
-
-struct CsvTomatoCsvLine {
-	char *columns[CSVTMT_CSV_COLS_SIZE];
-	size_t len;
-};
+typedef enum {
+	CSVTMT_STACK_ELEM_STRING_VALUE,
+	CSVTMT_STACK_ELEM_INT_VALUE,
+	CSVTMT_STACK_ELEM_FLOAT_VALUE,
+	CSVTMT_STACK_ELEM_IDENT,
+	CSVTMT_STACK_ELEM_KEY_VALUE,
+	CSVTMT_STACK_ELEM_COLUMN_NAMES_BEG,
+	CSVTMT_STACK_ELEM_VALUES_BEG,
+	CSVTMT_STACK_ELEM_UPDATE_SET_BEG,
+	CSVTMT_STACK_ELEM_UPDATE_WHERE_BEG,
+} CsvTomatoStackElemKind;
 
 typedef enum {
 	CSVTMT_VAL_NONE,
@@ -343,6 +386,42 @@ struct CsvTomatoValue {
 	int64_t int_value;
 	double float_value;
 	const char *string_value;
+};
+
+struct CsvTomatoStackElem {
+	CsvTomatoStackElemKind kind;
+	union {
+		struct {
+			const char *value;
+		} string_value;
+		struct {
+			int64_t value;
+		} int_value;
+		struct {
+			double value;
+		} float_value;
+		struct {
+			const char *value;
+		} ident;
+		struct {
+			const char *key;
+			CsvTomatoValue value;
+		} key_value;
+	} obj;
+};
+
+struct CsvTomatoKeyValue {
+	const char *key;
+	CsvTomatoValue value;
+};
+
+struct CsvTomatoExecutor {
+	int a;
+};
+
+struct CsvTomatoCsvLine {
+	char *columns[CSVTMT_CSV_COLS_SIZE];
+	size_t len;
 };
 
 struct CsvTomatoValues {
@@ -371,12 +450,6 @@ struct CsvTomatoHeader {
 	size_t types_len;
 };
 
-typedef enum {
-	CSVTMT_MODE_NONE,
-	CSVTMT_MODE_COLUMN_NAMES,
-	CSVTMT_MODE_VALUES,
-} CsvTomatoMode;
-
 struct CsvTomatoModel {
 	char db_dir[CSVTMT_PATH_SIZE];
 	const char *table_name;
@@ -388,7 +461,12 @@ struct CsvTomatoModel {
 	size_t values_len;
 	CsvTomatoHeader header;
 	CsvTomatoString *buf;
-	CsvTomatoMode mode;
+	CsvTomatoKeyValue update_set_key_values[CSVTMT_ASSIGNS_ARRAY_SIZE];
+	size_t update_set_key_values_len;
+	CsvTomatoKeyValue where_key_values[CSVTMT_ASSIGNS_ARRAY_SIZE];
+	size_t where_key_values_len;
+	CsvTomatoStackElem stack[CSVTMT_EXEC_STACK_SIZE];
+	size_t stack_len;
 };
 
 /*************
@@ -570,6 +648,9 @@ csvtmt_file_mkdir(const char *path);
 int
 csvtmt_file_touch(const char *path);
 
+int
+csvtmt_file_rename(const char *old, const char *new);
+
 // stringlist.c 
 
 CsvTomatoStringList *
@@ -588,7 +669,29 @@ csvtmt_strlist_move_back_str(
 // csv.c
 
 void
+csvtmt_csvline_set_clone(
+	CsvTomatoCsvLine *self,
+	size_t index,
+	const char *col,
+	CsvTomatoError *error
+);
+
+int
 csvtmt_csvline_parse_stream(
+	CsvTomatoCsvLine *self,
+	FILE *fp,
+	CsvTomatoError *error
+);
+
+const char *
+csvtmt_csvline_parse_string(
+	CsvTomatoCsvLine *self,
+	const char *str,
+	CsvTomatoError *error
+);
+
+void
+csvtmt_csvline_append_to_stream(
 	CsvTomatoCsvLine *self,
 	FILE *fp,
 	CsvTomatoError *error
@@ -601,3 +704,6 @@ csvtmt_csvline_destroy(CsvTomatoCsvLine *self);
 
 void
 csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error);
+
+void
+csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error);

@@ -4,7 +4,9 @@ sql_stmt_list ::=
 	[ sql_stmt ] ( ';' [ sql_stmt ] ) *
 
 sql_stmt ::= 
-	create_table_stmt | insert_stmt
+	create_table_stmt |
+	insert_stmt |
+	update_stmt
 
 create_table_stmt ::= 
 	CREATE TABLE [ IF NOT EXISTS ] table_name ( '(' column_def ( ',' column_def ) * ')' 
@@ -21,6 +23,9 @@ column_constraint ::=
 insert_stmt ::=
 	INSERT INTO table_name [ '(' column_name ( ',' column_name ) * ')' ]  [ VALUES ( values ) * ]
 
+update_stmt ::= 
+	UPDATE table_name SET assign_expr ( ',' assign_expr ) * [ WHERE expr ]
+
 column_name ::=
 	column_name
 
@@ -28,7 +33,12 @@ values ::=
 	'(' expr ( ',' expr ) * ')'
 
 expr ::=
-	digit | string
+	assign_expr |
+	digit |
+	string
+
+assign_expr ::=
+	ident '=' expr	
 
 digit ::= 
 	int_digit | float_digit

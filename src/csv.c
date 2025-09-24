@@ -1,11 +1,12 @@
 #include <csvtomato.h>
 
-void
-csvtmt_csvline_parse_stream(
+const char *
+csvtmt_csvline_parse_string(
 	CsvTomatoCsvLine *self,
-	FILE *fp,
+	const char *str,
 	CsvTomatoError *error
 ) {
+	#undef store
 	#define store() {\
 		if (any_read) {\
 			if (self->len >= csvtmt_numof(self->columns)) {\
@@ -19,6 +20,7 @@ csvtmt_csvline_parse_stream(
 		}\
 	}\
 
+	#undef push
 	#define push(c) {\
 		if (!csvtmt_str_push_back(buf, c)) {\
 			csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to push back to string buffer");\
@@ -26,6 +28,141 @@ csvtmt_csvline_parse_stream(
 		}\
 	}\
 
+	#undef check_crlf
+	#define check_crlf() {\
+		c = *p++;\
+		if (c == EOF) {\
+			goto done;\
+		} else if (c == '\n') {\
+			goto done;\
+		} else {\
+			p--;\
+			goto done;\
+		}	\
+	}\
+
+	errno = 0;
+	CsvTomatoString *buf = csvtmt_str_new();
+	if (!buf) {
+		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate string: %s", strerror(errno));
+		return NULL;
+	}
+
+	bool any_read = false;
+	int sep = ',';
+	int m = 0;
+	const char *p = str;
+
+	for (; *p; ) {
+		int c = *p++;
+
+		switch (m) {
+		case 0:
+			if (c == '"') {
+				m = 10;
+				any_read = true;
+			} else if (c == sep) {
+				any_read = true;
+				store();
+			} else if (c == '\n') {
+				any_read = true;
+				goto done;
+			} else if (c == '\r') {
+				any_read = true;
+				check_crlf();
+			} else {
+				any_read = true;
+				push(c);
+				m = 30;
+			}
+			break;
+		case 10: // found begin "
+			if (c == '"') { 
+				c = *p++;
+				if (c == '"') {
+					push(c);
+				} else {
+					p--;
+					m = 20;
+				}
+			} else {
+				push(c);
+			}
+			break;
+		case 20: // found end "
+			if (c == sep) {
+				store();
+				m = 0;
+			} else if (c == '\n') {
+				goto done;
+			} else if (c == '\r') {
+				check_crlf();
+			} else {
+				// ignore
+			}
+			break;
+		case 30: // found normal character
+			if (c == '"') {
+				c = *p++;
+				if (c == '"') {
+					push(c);
+				} else {
+					p--;
+					csvtmt_str_clear(buf);
+					m = 10;
+				}
+			} else if (c == sep) {
+				store();
+				m = 0;
+			} else if (c == '\n') {
+				goto done;
+			} else if (c == '\r') {
+				check_crlf();
+			} else {
+				push(c);
+			}
+			break;
+		}
+	}
+
+done:
+	store();
+	csvtmt_str_del(buf);
+	return p;
+fail:
+	csvtmt_str_del(buf);
+	return NULL;
+}
+
+int
+csvtmt_csvline_parse_stream(
+	CsvTomatoCsvLine *self,
+	FILE *fp,
+	CsvTomatoError *error
+) {
+	#undef store
+	#define store() {\
+		if (any_read) {\
+			if (self->len >= csvtmt_numof(self->columns)) {\
+				csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "csv line columns overflow");\
+				goto fail;\
+			}\
+			char *s = csvtmt_str_esc_del(buf);\
+			self->columns[self->len++] = csvtmt_move(s);\
+			buf = csvtmt_str_new();\
+			any_read = false;\
+		}\
+	}\
+
+	#undef push
+	#define push(c) {\
+		if (!csvtmt_str_push_back(buf, c)) {\
+			csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to push back to string buffer");\
+			goto fail;\
+		}\
+	}\
+
+	#undef check_crlf
 	#define check_crlf() {\
 		c = fgetc(fp);\
 		if (c == EOF) {\
@@ -42,20 +179,20 @@ csvtmt_csvline_parse_stream(
 	CsvTomatoString *buf = csvtmt_str_new();
 	if (!buf) {
 		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate string: %s", strerror(errno));
-		return;
+		return 0;
 	}
 
 	bool any_read = false;
 	int sep = ',';
 	int m = 0;
+	int ret = 0;
 
 	for (;;) {
 		int c = fgetc(fp);
 		if (c == EOF) {
+			ret = c;
 			break;
 		}
-
-		// printf("m[%d] c[%c]\n", m, c);
 
 		switch (m) {
 		case 0:
@@ -129,10 +266,10 @@ csvtmt_csvline_parse_stream(
 done:
 	store();
 	csvtmt_str_del(buf);
-	return;
+	return ret;
 fail:
 	csvtmt_str_del(buf);
-	return;
+	return ret;
 }
 
 void
@@ -142,4 +279,98 @@ csvtmt_csvline_destroy(CsvTomatoCsvLine *self) {
 		self->columns[i] = NULL;
 	}
 	self->len = 0;
+}
+
+static void
+wrap_column(char *buf, size_t size, const char *col) {
+	char *end = buf + size-2;
+	char *b = buf;
+	const char *p = col;
+
+	*b++ = '"';
+
+	for (; *p && b < end; p++, b++) {
+		if (*p == '"') {
+			*b++ = '"';
+			*b = '"';
+		} else {
+			*b = *p;
+		}
+	}
+
+	*b++ = '"';
+	*b = '\0';
+}
+
+static void
+append_column_to_stream(const char *col, FILE *fp, CsvTomatoError *error) {
+	size_t len = strlen(col);
+
+	if (len == 0) {
+		return;
+	}
+
+	const char *chars = "\"\n";
+	bool wrap = false;
+
+	for (const char *ch = chars; *ch; ch++) {
+		if (strchr(col, *ch)) {
+			wrap = true;
+			break;
+		}
+	}
+
+	if (wrap) {
+		size_t size = len*2+1;
+		char buf[size];
+		wrap_column(buf, size, col);
+		fprintf(fp, "%s", buf);
+	} else {
+		fprintf(fp, "%s", col);
+	}
+}
+
+void
+csvtmt_csvline_append_to_stream(
+	CsvTomatoCsvLine *self,
+	FILE *fp,
+	CsvTomatoError *error
+) {
+	for (size_t i = 0; i < self->len-1; i++) {
+		const char *col = self->columns[i];
+		append_column_to_stream(col, fp, error);
+		if (error->error) {
+			return;
+		}
+		fputc(',', fp);
+	}	
+	if (self->len) {
+		const char *col = self->columns[self->len-1];
+		append_column_to_stream(col, fp, error);
+		if (error->error) {
+			return;
+		}
+	}
+	fputc('\n', fp);
+}
+
+void
+csvtmt_csvline_set_clone(
+	CsvTomatoCsvLine *self,
+	size_t index,
+	const char *col,
+	CsvTomatoError *error
+) {
+	if (index >= self->len) {
+		csvtmt_error_format(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "index out of range");
+		return;
+	}
+
+	char *clone = csvtmt_strdup(col, error);
+	if (error->error) {
+		return;
+	}
+
+	free(self->columns[index]);
+	self->columns[index] = clone;
 }
