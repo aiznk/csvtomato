@@ -45,6 +45,7 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 		csvtmt_node_del_all(self->obj.sql_stmt.create_table_stmt);
 		csvtmt_node_del_all(self->obj.sql_stmt.insert_stmt);
 		csvtmt_node_del_all(self->obj.sql_stmt.update_stmt);
+		csvtmt_node_del_all(self->obj.sql_stmt.delete_stmt);
 		break;
 	case CSVTMT_ND_CREATE_TABLE_STMT:
 		// puts("CSVTMT_ND_CREATE_TABLE_STMT");
@@ -79,6 +80,10 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 		}
 
 		csvtmt_node_del_all(self->obj.update_stmt.where_expr);
+		break;
+	case CSVTMT_ND_DELETE_STMT:
+		free(self->obj.delete_stmt.table_name);
+		csvtmt_node_del_all(self->obj.delete_stmt.where_expr);
 		break;
 	case CSVTMT_ND_VALUES:
 		for (CsvTomatoNode *cur = self->obj.values.expr_list; cur; ) {
@@ -143,6 +148,7 @@ static CsvTomatoNode *parse_sql_stmt(CsvTomatoParser *self, CsvTomatoToken **tok
 static CsvTomatoNode *parse_create_table_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_insert_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_update_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
+static CsvTomatoNode *parse_delete_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_column_name(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_values(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_expr(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
@@ -278,6 +284,14 @@ parse_sql_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *er
 		goto fail;
 	}
 	if (n1->obj.sql_stmt.update_stmt) {
+		return n1;
+	}
+
+	n1->obj.sql_stmt.delete_stmt = parse_delete_stmt(self, token, error);
+	if (error->error) {
+		goto fail;
+	}
+	if (n1->obj.sql_stmt.delete_stmt) {
 		return n1;
 	}
 
@@ -482,6 +496,68 @@ parse_column_constraint(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomato
 ok:
 	return n1;
 fail:
+	csvtmt_node_del_all(n1);
+	return NULL;
+}
+
+// DELETE FROM table_name [ WHERE expr ]
+static CsvTomatoNode *
+parse_delete_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error) {
+	if (is_end(token)) {
+		return NULL;
+	}
+
+	CsvTomatoNode *n1 = csvtmt_node_new(CSVTMT_ND_DELETE_STMT, error);
+	if (error->error) {
+		return NULL;
+	}
+
+	if (kind(token) != CSVTMT_TK_DELETE) {
+		goto ret_null;
+	} else {
+		next(token);
+	}
+	if (kind(token) != CSVTMT_TK_FROM) {
+		goto not_found_from;
+	} else {
+		next(token);
+	}
+	if (kind(token) != CSVTMT_TK_IDENT) {
+		goto not_found_table_name;
+	} else {
+		n1->obj.delete_stmt.table_name = csvtmt_strdup(text(token), error);
+		if (error->error) {
+			goto failed_to_strdup;
+		}
+		next(token);
+	}
+
+	if (kind(token) == CSVTMT_TK_WHERE) {
+		next(token);
+		n1->obj.delete_stmt.where_expr = parse_expr(self, token, error);
+		if (!n1->obj.delete_stmt.where_expr || error->error) {
+			goto failed_to_parse_expr;
+		}
+	}
+
+	return n1;
+failed_to_parse_expr:
+	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "failed to parse WHERE expression on DELETE");
+	csvtmt_node_del_all(n1);
+	return NULL;
+failed_to_strdup:
+	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "failed to strdup");
+	csvtmt_node_del_all(n1);
+	return NULL;
+not_found_table_name:
+	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found table name on DELETE");
+	csvtmt_node_del_all(n1);
+	return NULL;
+not_found_from:
+	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found FROM on DELETE");
+	csvtmt_node_del_all(n1);
+	return NULL;
+ret_null:
 	csvtmt_node_del_all(n1);
 	return NULL;
 }

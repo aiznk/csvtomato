@@ -115,6 +115,17 @@ csvtmt_executor_exec(
 				goto insert_error;
 			}			
 		} break;
+		case CSVTMT_OP_DELETE_STMT_BEG: {
+			model->table_name = op->obj.delete_stmt.table_name;
+			snprintf(model->table_path, sizeof model->table_path, "%s/%s.csv", model->db_dir, model->table_name);
+			model->where_key_values_len = 0;
+		} break;
+		case CSVTMT_OP_DELETE_STMT_END: {
+			csvtmt_delete(model, error);
+			if (error->error) {
+				goto delete_error;
+			}
+		} break;
 		case CSVTMT_OP_COLUMN_NAMES_BEG: {
 			stack_push_kind(CSVTMT_STACK_ELEM_COLUMN_NAMES_BEG);
 		} break;
@@ -203,21 +214,21 @@ csvtmt_executor_exec(
 				}
 			}
 		} break;
-		case CSVTMT_OP_UPDATE_WHERE_BEG: {
+		case CSVTMT_OP_WHERE_BEG: {
 			model->where_key_values_len = 0;
-			stack_push_kind(CSVTMT_STACK_ELEM_UPDATE_WHERE_BEG);
+			stack_push_kind(CSVTMT_STACK_ELEM_WHERE_BEG);
 		} break;
-		case CSVTMT_OP_UPDATE_WHERE_END: {
+		case CSVTMT_OP_WHERE_END: {
 			while (model->stack_len) {
 				stack_pop(pop);
 
-				if (pop.kind == CSVTMT_STACK_ELEM_UPDATE_WHERE_BEG) {
+				if (pop.kind == CSVTMT_STACK_ELEM_WHERE_BEG) {
 					break;
 				}
 				switch (pop.kind) {
 				default: goto invalid_stack_elem_kind; break;
 				case CSVTMT_STACK_ELEM_KEY_VALUE: {
-					if (model->where_key_values_len >= csvtmt_numof(model->update_set_key_values)) {
+					if (model->where_key_values_len >= csvtmt_numof(model->where_key_values)) {
 						goto array_overflow;
 					}
 				 	CsvTomatoKeyValue *kv =  &model->where_key_values[model->where_key_values_len++];
@@ -385,6 +396,9 @@ update_error:
 	cleanup();
 	return;	
 insert_error:
+	cleanup();
+	return;	
+delete_error:
 	cleanup();
 	return;	
 array_overflow:

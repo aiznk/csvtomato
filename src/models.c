@@ -610,6 +610,180 @@ replace_row(
 	}
 }
 
+static ColumnInfo *
+where_match(ColumnInfoArray *where_infos, CsvTomatoCsvLine *row) {
+	for (size_t ii = 0; ii < where_infos->len; ii++) {
+		ColumnInfo *winfo = &where_infos->array[ii];
+
+		for (size_t ci = 0; ci < row->len; ci++) {
+			const char *col = row->columns[ci];
+			if (ci == winfo->index) {
+				CsvTomatoValue val = string_to_value(col);
+				if (value_eq(&winfo->value, &val)) {
+					return winfo;
+				}
+			}
+		}
+	}	
+	return NULL;
+}
+
+void
+csvtmt_delete(CsvTomatoModel *model, CsvTomatoError *error) {
+	const char *not_found = NULL;
+	bool has_where = model->where_key_values_len;
+	CsvTomatoCsvLine row = {0};
+	
+	header_read_from_table(&model->header, model->table_path, error);
+	if (error->error) {
+		goto failed_to_header_read;
+	}
+
+	not_found = header_has_key_values_types(
+		&model->header,
+		model->update_set_key_values,
+		model->update_set_key_values_len,
+		error
+	);
+	if (not_found) {
+		goto invalid_key_values_type;
+	}
+
+	char *ptr;
+	int fd;
+	size_t size;
+
+	{ // Linux
+		errno = 0;
+		fd = open(model->table_path, O_RDWR);
+		if (fd == -1) {
+			goto failed_to_open_table;
+		}
+
+		struct stat st;
+		errno = 0;
+		if (fstat(fd, &st) == -1) {
+			close(fd);
+			goto failed_to_stat;
+		}
+
+		size = st.st_size;
+
+		ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+		if (ptr == MAP_FAILED) {
+			goto failed_to_mmap;
+		}
+	}
+
+	if (has_where) {
+		// DELETEではWHEREにマッチする行は論理削除を行う。
+		ColumnInfoArray where_infos = {0};
+
+		store_colinfo(model, &where_infos, model->where_key_values, model->where_key_values_len, error);
+		if (error->error) {
+			goto array_overflow;
+		}
+
+		CsvTomatoCsvLine row = {0};
+		char *p = ptr;
+
+		// skip first line (header)
+		p = (char *) csvtmt_csvline_parse_string(&row, p, error);
+		if (error->error) {
+			goto failed_to_parse_csv;
+		}
+		csvtmt_csvline_destroy(&row);
+
+		// CSVファイルを走査して、indicesの列の値がkvsのvalueと
+		// 一致しているか見る。一致していればWHEREにマッチしている行と見なす。
+		// WHERE value1 = 123
+		for (; *p; ) {
+			char *head = p;
+			p = (char *) csvtmt_csvline_parse_string(&row, p, error);
+			if (error->error) {
+				goto failed_to_parse_csv;
+			}
+			if (!strcmp(row.columns[0], "1")) {
+				csvtmt_csvline_destroy(&row);
+				continue;  // this line deleted
+			}
+
+			ColumnInfo *winfo = where_match(&where_infos, &row);
+			if (winfo) {
+				// match
+				if (*head == '"') {
+					head++;
+				}
+				// __MODE__ column to 1 (delete)
+				*head = '1';
+			}
+
+			csvtmt_csvline_destroy(&row);
+		}
+
+
+	} else {
+		// 全論理削除。
+		char *p = ptr;
+
+		// skip first line (header)
+		p = (char *) csvtmt_csvline_parse_string(&row, p, error);
+		if (error->error) {
+			goto failed_to_parse_csv;
+		}
+		csvtmt_csvline_destroy(&row);
+
+		// CSVファイルを走査して、indicesの列の値がkvsのvalueと
+		// 一致しているか見る。一致していればWHEREにマッチしている行と見なす。
+		// WHERE value1 = 123
+		for (; *p; ) {
+			char *head = p;
+			p = (char *) csvtmt_csvline_parse_string(&row, p, error);
+			if (error->error) {
+				goto failed_to_parse_csv;
+			}
+			if (!strcmp(row.columns[0], "1")) {
+				csvtmt_csvline_destroy(&row);
+				continue;  // this line deleted
+			}
+			if (*head == '"') {
+				head++;
+			}
+			// __MODE__ column to 1 (delete)
+			*head = '1';
+
+			csvtmt_csvline_destroy(&row);
+		}
+	}
+
+	{ // Linux
+		munmap(ptr, size);
+		close(fd);
+	}
+
+	return;
+failed_to_header_read:
+	return;
+failed_to_parse_csv:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to parse csv line");
+	return;
+array_overflow:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "array overflow");
+	return;
+failed_to_stat:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to get table size: %s", strerror(errno));
+	return;
+failed_to_mmap:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to mmap. %s", strerror(errno));
+	return;
+failed_to_open_table:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to open table %s. %s", model->table_path, strerror(errno));
+	return;
+invalid_key_values_type:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid update key. \"%s\" is not in header types", not_found);
+	return;
+}
+
 void
 csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error) {
 	const char *not_found = NULL;
