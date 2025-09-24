@@ -6,7 +6,8 @@ sql_stmt_list ::=
 sql_stmt ::= 
 	create_table_stmt |
 	insert_stmt |
-	update_stmt
+	update_stmt |
+	delete_stmt
 
 create_table_stmt ::= 
 	CREATE TABLE [ IF NOT EXISTS ] table_name ( '(' column_def ( ',' column_def ) * ')' 
@@ -25,6 +26,9 @@ insert_stmt ::=
 
 update_stmt ::= 
 	UPDATE table_name SET assign_expr ( ',' assign_expr ) * [ WHERE expr ]
+
+delete_stmt ::=
+	DELETE FROM table_name [ WHERE expr ]
 
 column_name ::=
 	column_name

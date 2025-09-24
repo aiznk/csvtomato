@@ -80,6 +80,8 @@ typedef enum {
 	CSVTMT_TK_SELECT,
 	CSVTMT_TK_INSERT,
 	CSVTMT_TK_UPDATE,
+	CSVTMT_TK_DELETE,
+	CSVTMT_TK_FROM,
 	CSVTMT_TK_SET,
 	CSVTMT_TK_WHERE,
 	CSVTMT_TK_INTO,
@@ -103,6 +105,7 @@ typedef enum {
 	CSVTMT_ND_CREATE_TABLE_STMT,
 	CSVTMT_ND_INSERT_STMT,
 	CSVTMT_ND_UPDATE_STMT,
+	CSVTMT_ND_DELETE_STMT,
 	CSVTMT_ND_VALUES,
 	CSVTMT_ND_EXPR,
 	CSVTMT_ND_ASSIGN_EXPR,
@@ -123,8 +126,10 @@ typedef enum {
 	CSVTMT_OP_UPDATE_STMT_END,
 	CSVTMT_OP_UPDATE_SET_BEG,
 	CSVTMT_OP_UPDATE_SET_END,
-	CSVTMT_OP_UPDATE_WHERE_BEG,
-	CSVTMT_OP_UPDATE_WHERE_END,
+	CSVTMT_OP_WHERE_BEG,
+	CSVTMT_OP_WHERE_END,
+	CSVTMT_OP_DELETE_STMT_BEG,
+	CSVTMT_OP_DELETE_STMT_END,
 	CSVTMT_OP_COLUMN_NAMES_BEG,
 	CSVTMT_OP_COLUMN_NAMES_END,
 	CSVTMT_OP_ASSIGN,
@@ -261,6 +266,7 @@ struct CsvTomatoNode {
 			struct CsvTomatoNode *create_table_stmt;
 			struct CsvTomatoNode *insert_stmt;
 			struct CsvTomatoNode *update_stmt;
+			struct CsvTomatoNode *delete_stmt;
 		} sql_stmt;
 		struct {
 			char *table_name;
@@ -277,6 +283,10 @@ struct CsvTomatoNode {
 			struct CsvTomatoNode *assign_expr_list;
 			struct CsvTomatoNode *where_expr;
 		} update_stmt;
+		struct {
+			char *table_name;
+			struct CsvTomatoNode *where_expr;
+		} delete_stmt;
 		struct {
 			char *column_name;
 		} column_name;
@@ -340,6 +350,9 @@ struct CsvTomatoOpcodeElem {
 			char *table_name;
 		} update_stmt;
 		struct {
+			char *table_name;
+		} delete_stmt;
+		struct {
 			char *value;
 		} ident;
 		struct {
@@ -372,7 +385,7 @@ typedef enum {
 	CSVTMT_STACK_ELEM_COLUMN_NAMES_BEG,
 	CSVTMT_STACK_ELEM_VALUES_BEG,
 	CSVTMT_STACK_ELEM_UPDATE_SET_BEG,
-	CSVTMT_STACK_ELEM_UPDATE_WHERE_BEG,
+	CSVTMT_STACK_ELEM_WHERE_BEG,
 } CsvTomatoStackElemKind;
 
 typedef enum {
@@ -717,3 +730,7 @@ csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error);
 
 void
 csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error);
+
+void
+csvtmt_delete(CsvTomatoModel *model, CsvTomatoError *error);
+

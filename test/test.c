@@ -473,6 +473,33 @@ test_executor(void) {
 		"0,3,Tamako,123\n"
 		"0,3,Tamako,123\n"		
 	);
+	exec(
+		"INSERT INTO users (name, age) VALUES (\"Hanako\", 223), (\"Taro\", 223)",
+		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
+		"0,3,Tamako,123\n"
+		"0,3,Tamako,123\n"
+		"0,3,Tamako,123\n"		
+		"0,4,Hanako,223\n"
+		"0,5,Taro,223\n"
+	);
+	exec(
+		"DELETE FROM users WHERE age = 223",
+		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
+		"0,3,Tamako,123\n"
+		"0,3,Tamako,123\n"
+		"0,3,Tamako,123\n"		
+		"1,4,Hanako,223\n"
+		"1,5,Taro,223\n"
+	);
+	exec(
+		"DELETE FROM users",
+		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
+		"1,3,Tamako,123\n"
+		"1,3,Tamako,123\n"
+		"1,3,Tamako,123\n"		
+		"1,4,Hanako,223\n"
+		"1,5,Taro,223\n"
+	);
 }
 
 
