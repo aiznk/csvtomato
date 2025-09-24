@@ -1,5 +1,29 @@
 #include <csvtomato.h>
 
+char *
+csvtmt_file_read(const char *path) {
+    FILE *fp = fopen(path, "r");
+    if (!fp) {
+        return NULL;
+    }
+
+    fseek(fp, 0, SEEK_END);
+    size_t size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+
+    char *p = malloc(size+1);
+    if (!p) {
+        fclose(fp);
+        return NULL;
+    }
+
+    fread(p, sizeof(char), size, fp);
+    p[size] = 0;
+
+    fclose(fp);
+    return p;
+}
+
 int
 csvtmt_file_rename(const char *old, const char *new) {
     return rename(old, new);

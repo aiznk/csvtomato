@@ -50,7 +50,11 @@ destroy_elem(CsvTomatoOpcodeElem *elem) {
 		free(elem->obj.ident.value);
 		break;
 	case CSVTMT_OP_STRING_VALUE:
-		free(elem->obj.string_value.value);
+		if (elem->obj.string_value.destructor) {
+			elem->obj.string_value.destructor(elem->obj.string_value.value);
+		} else {
+			free(elem->obj.string_value.value);
+		}
 		break;
 	case CSVTMT_OP_INT_VALUE: break;
 	case CSVTMT_OP_FLOAT_VALUE: break;

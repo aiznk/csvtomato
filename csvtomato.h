@@ -332,6 +332,7 @@ struct CsvTomatoOpcode {
 
 struct CsvTomatoOpcodeElem {
 	CsvTomatoOpcodeKind kind;
+	CsvTomatoOpcodeKind old_kind;
 	union {
 		struct {
 			char *table_name;
@@ -351,6 +352,7 @@ struct CsvTomatoOpcodeElem {
 		} ident;
 		struct {
 			char *value;
+			void (*destructor)(void *);
 		} string_value;
 		struct {
 			int64_t value;
@@ -572,7 +574,15 @@ void
 csvtmt_bind_int(
 	CsvTomatoStmt *stmt,
 	size_t index, 
-	ssize_t value, 
+	int64_t value, 
+	CsvTomatoError *error
+);
+
+void
+csvtmt_bind_float(
+	CsvTomatoStmt *stmt,
+	size_t index, 
+	double value, 
 	CsvTomatoError *error
 );
 
@@ -669,6 +679,9 @@ csvtmt_executor_exec(
 );
 
 // file.c
+
+char *
+csvtmt_file_read(const char *path);
 
 int 
 csvtmt_file_remove(const char *path);
