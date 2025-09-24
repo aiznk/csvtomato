@@ -1,5 +1,10 @@
 #include <csvtomato.h>
 
+void
+csvtmt_error_clear(CsvTomatoError *self) {
+	self->error = false;
+}
+
 void _Noreturn
 csvtmt_die(const char *s) {
 	fprintf(stderr, "%s\n", s);

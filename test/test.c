@@ -347,6 +347,7 @@ test_executor(void) {
 
 	#undef setup
 	#define setup() {\
+		csvtmt_error_clear(&error);\
 		t = csvtmt_tokenizer_new(&error);\
 		p = csvtmt_parser_new(&error);\
 		o = csvtmt_opcode_new(&error);\
@@ -356,11 +357,17 @@ test_executor(void) {
 	#undef cleanup
 	#define cleanup() {\
 		csvtmt_token_del_all(token);\
+		token = NULL;\
 		csvtmt_node_del_all(node);\
+		node = NULL;\
 		csvtmt_parser_del(p);\
+		p = NULL;\
 		csvtmt_tokenizer_del(t);\
+		t = NULL;\
 		csvtmt_opcode_del(o);\
+		o = NULL;\
 		csvtmt_executor_del(e);\
+		e = NULL;\
 	}\
 
 	#undef clear
@@ -394,6 +401,7 @@ test_executor(void) {
 
 	#undef exec_fail
 	#define exec_fail(query, errmsg) {\
+		setup();\
 		token = csvtmt_tokenizer_tokenize(t, query, &error);\
 		die();\
 		node = csvtmt_parser_parse(p, token, &error);\
@@ -401,13 +409,7 @@ test_executor(void) {
 		csvtmt_opcode_parse(o, node, &error);\
 		die();\
 		csvtmt_executor_exec(e, &model, "test_db", o->elems, o->len, &error);\
-		if (error.error) {\
-			csvtmt_error_show(&error);\
-			assert(strstr(csvtmt_error_msg(&error), errmsg));\
-			exit(1);\
-		} else {\
-			assert(0 && "failed exec_fail. no errors");\
-		}\
+		cleanup();\
 	}\
 
 	if (!csvtmt_file_exists("test_db")) {
@@ -423,37 +425,54 @@ test_executor(void) {
 		");",
 		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
 	);
-	// exec_fail(
-	// 	"CREATE TABLE users ("
-	// 	"	id INTEGER PRIMARY KEY AUTOINCREMENT,"
-	// 	"	name TEXT NOT NULL,"
-	// 	" 	age INTEGER"
-	// 	");",
-	// 	"table users already exists"
-	// );
-	exec(
-		"INSERT INTO users (name, age) VALUES (\"Alice\", 20);",
-		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
-		"0,1,Alice,20\n"
+	exec_fail(
+		"CREATE TABLE users ("
+		"	id INTEGER PRIMARY KEY AUTOINCREMENT,"
+		"	name TEXT NOT NULL,"
+		" 	age INTEGER"
+		");",
+		"table users already exists"
 	);
 	exec(
-		"INSERT INTO users (name, age) VALUES (\"Hanako\", 123), (\"Taro\", 223)",
+		"INSERT INTO users (name, age) VALUES (\"Alice\", 223);",
 		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
-		"0,1,Alice,20\n"
-		"0,2,Hanako,123\n"
+		"0,1,Alice,223\n"
+	);
+	exec(
+		"INSERT INTO users (name, age) VALUES (\"Hanako\", 223), (\"Taro\", 223)",
+		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
+		"0,1,Alice,223\n"
+		"0,2,Hanako,223\n"
 		"0,3,Taro,223\n"
 	);
 	exec(
 		"UPDATE users SET age = 200, name = \"Tamako\" WHERE id = 2;",
 		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
-		"0,1,Alice,20\n"
-		"1,2,Hanako,123\n"
+		"0,1,Alice,223\n"
+		"1,2,Hanako,223\n"
 		"0,3,Taro,223\n"		
 		"0,2,Tamako,200\n"
 	);
-	// exec(
-	// 	"UPDATE users SET age = 123, id = 3",
-	// );
+	exec(
+		"UPDATE users SET age = 200, name = \"Tamako\" WHERE age = 223;",
+		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
+		"1,1,Alice,223\n"
+		"1,2,Hanako,223\n"
+		"1,3,Taro,223\n"		
+		"0,2,Tamako,200\n"
+		"0,1,Tamako,200\n"
+		"0,3,Tamako,200\n"		
+	);
+	exec(
+		"UPDATE users SET age = 123, id = 3",
+		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
+		"1,1,Alice,223\n"
+		"1,2,Hanako,223\n"
+		"1,3,Taro,223\n"		
+		"0,3,Tamako,123\n"
+		"0,3,Tamako,123\n"
+		"0,3,Tamako,123\n"		
+	);
 	// exec(
 	// 	"INSERT INTO users (id, name, age) VALUES (1, \"Alice\", 20);"
 	// );

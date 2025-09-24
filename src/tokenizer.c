@@ -264,5 +264,6 @@ csvtmt_tokenizer_tokenize(
 
 	return root;
 fail:
+	csvtmt_token_del_all(root);
 	return NULL;
 }

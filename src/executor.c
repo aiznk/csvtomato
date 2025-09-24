@@ -294,8 +294,7 @@ csvtmt_executor_exec(
 			if (csvtmt_file_exists(model->table_path)) {
 				model->do_create_table = false;
 				if (!if_not_exists) {
-					csvtmt_error_format(error, CSVTMT_ERR_EXEC, "table %s already exists", model->table_name);
-					return;
+					goto table_already_exists;
 				}
 			} else {
 				model->do_create_table = true;
@@ -337,8 +336,7 @@ csvtmt_executor_exec(
 			const CsvTomatoTokenKind type_name = op->obj.column_def.type_name;
 			switch (type_name) {
 			default: 
-				csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid type name: %d", type_name);
-				return;
+				goto invalid_type_name;
 				break;
 			case CSVTMT_TK_INTEGER: csvtmt_str_append(model->buf, " INTEGER"); break;
 			case CSVTMT_TK_TEXT: csvtmt_str_append(model->buf, " TEXT"); break;
@@ -361,6 +359,14 @@ csvtmt_executor_exec(
 		}
 	}
 
+	cleanup();
+	return;
+table_already_exists:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "table %s already exists", model->table_name);
+	cleanup();
+	return;
+invalid_type_name:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid type name");
 	cleanup();
 	return;
 stack_overflow:
