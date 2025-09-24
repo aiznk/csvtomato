@@ -198,7 +198,7 @@ csvtmt_executor_exec(
 				 	CsvTomatoKeyValue *kv =  &model->update_set_key_values[model->update_set_key_values_len++];
 				 	kv->key = pop.obj.key_value.key;
 				 	kv->value = pop.obj.key_value.value;
-				 	printf("kv->key[%s]\n", kv->key);
+				 	// printf("kv->key[%s]\n", kv->key);
 				} break;
 				}
 			}
@@ -223,7 +223,7 @@ csvtmt_executor_exec(
 				 	CsvTomatoKeyValue *kv =  &model->where_key_values[model->where_key_values_len++];
 				 	kv->key = pop.obj.key_value.key;
 				 	kv->value = pop.obj.key_value.value;
-				 	printf("where kv->key[%s]\n", kv->key);
+				 	// printf("where kv->key[%s]\n", kv->key);
 				} break;
 				}
 			}
