@@ -445,6 +445,8 @@ test_executor(void) {
 		"0,2,Hanako,223\n"
 		"0,3,Taro,223\n"
 	);
+	// UPDATEでWHEREを指定した場合はマッチした行を論理削除し、
+	// ファイル末尾にコピー＆編集した行を追記する。
 	exec(
 		"UPDATE users SET age = 200, name = \"Tamako\" WHERE id = 2;",
 		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
@@ -463,19 +465,14 @@ test_executor(void) {
 		"0,1,Tamako,200\n"
 		"0,3,Tamako,200\n"		
 	);
+	// UPDATEの全置換では論理削除した行は自動的にドロップする。
 	exec(
 		"UPDATE users SET age = 123, id = 3",
 		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
-		"1,1,Alice,223\n"
-		"1,2,Hanako,223\n"
-		"1,3,Taro,223\n"		
 		"0,3,Tamako,123\n"
 		"0,3,Tamako,123\n"
 		"0,3,Tamako,123\n"		
 	);
-	// exec(
-	// 	"INSERT INTO users (id, name, age) VALUES (1, \"Alice\", 20);"
-	// );
 }
 
 
