@@ -258,6 +258,8 @@ csvtmt_tokenizer_tokenize(
 			store(CSVTMT_TK_PLACE_HOLDER);
 		} else if (c1 == ',') {
 			store(CSVTMT_TK_COMMA);
+		} else if (c1 == '?') {
+			store(CSVTMT_TK_PLACE_HOLDER);
 		} else {
 			csvtmt_error_format(error, CSVTMT_ERR_TOKENIZE, "not supported character '%c' on tokenize", c1);
 			goto fail;

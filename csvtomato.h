@@ -140,6 +140,7 @@ typedef enum {
 	CSVTMT_OP_FLOAT_VALUE,
 	CSVTMT_OP_STRING_VALUE,
 	CSVTMT_OP_COLUMN_DEF,
+	CSVTMT_OP_PLACE_HOLDER,
 } CsvTomatoOpcodeKind;
 
 /*********
@@ -226,10 +227,6 @@ struct CsvTomatoError {
 	char message[CSVTMT_ERR_MSG_SIZE];
 };
 
-struct CsvTomatoStmt {
-	int a;
-};
-
 struct CsvTomatoToken {
 	CsvTomatoTokenKind kind;
 	char text[CSVTMT_STR_SIZE];
@@ -293,6 +290,7 @@ struct CsvTomatoNode {
 			struct CsvTomatoNode *assign_expr;
 			struct CsvTomatoNode *number;
 			struct CsvTomatoNode *string;
+			bool place_holder;
 		} expr;
 		struct {
 			char *ident;
@@ -389,6 +387,7 @@ typedef enum {
 	CSVTMT_VAL_INT,
 	CSVTMT_VAL_FLOAT,
 	CSVTMT_VAL_STRING,
+	CSVTMT_VAL_PLACE_HOLDER,
 } CsvTomatoValueKind;
 
 struct CsvTomatoValue {
@@ -480,6 +479,16 @@ struct CsvTomatoModel {
 };
 
 struct CsvTomato {
+	CsvTomatoTokenizer *tokenizer;
+	CsvTomatoParser *parser;
+	CsvTomatoExecutor *executor;
+	CsvTomatoOpcode *opcode;
+	CsvTomatoToken *token;
+	CsvTomatoNode *node;
+	CsvTomatoModel model;
+};
+
+struct CsvTomatoStmt {
 	CsvTomatoTokenizer *tokenizer;
 	CsvTomatoParser *parser;
 	CsvTomatoExecutor *executor;
