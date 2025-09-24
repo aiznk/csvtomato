@@ -239,7 +239,7 @@ gen_auto_increment_id(
 		csvtmt_file_touch(id_path);
 	}
 
-	puts(id_path);
+	// puts(id_path);
 	FILE *id_fp = fopen(id_path, "r+");
 	if (!id_fp) {
 		goto failed_to_open_file;
@@ -555,7 +555,7 @@ store_colinfo(
 	size_t kvs_len,
 	CsvTomatoError *error
 ) {
-	// ヘッダのタイプ列にwhere_key_valuesのkeyがあるか見る。
+	// ヘッダのタイプ列にkvsのkeyがあるか見る。
 	// あれば、そのタイプのインデックスを得る。
 	// このインデックスがWHERE比較をする列番号になる。
 	CsvTomatoColumnType *types = model->header.types;
@@ -584,6 +584,24 @@ store_colinfo(
 array_overflow:
 	csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "array overflow");
 	return;
+}
+
+static void
+replace_row(
+	CsvTomatoModel *model,
+	CsvTomatoCsvLine *row,
+	ColumnInfoArray *infos, 
+	CsvTomatoError *error
+) {
+	for (size_t i = 0; i < infos->len; i++) {
+		ColumnInfo *info = &infos->array[i];
+		char buf[1024];
+		const char *str = NULL;
+		value_to_string(&info->value, buf, sizeof buf, &str);
+		const char *p = str ? str : buf;
+		// printf("replace value[%s]\n", p);
+		csvtmt_csvline_set_clone(row, info->index, p, error);
+	}
 }
 
 void
@@ -643,9 +661,14 @@ csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error) {
 			}
 		}
 
-		ColumnInfoArray infos = {0};
+		ColumnInfoArray where_infos = {0};
+		ColumnInfoArray set_infos = {0};
 
-		store_colinfo(model, &infos, model->where_key_values, model->where_key_values_len, error);
+		store_colinfo(model, &where_infos, model->where_key_values, model->where_key_values_len, error);
+		if (error->error) {
+			goto array_overflow;
+		}
+		store_colinfo(model, &set_infos, model->update_set_key_values, model->update_set_key_values_len, error);
 		if (error->error) {
 			goto array_overflow;
 		}
@@ -674,16 +697,19 @@ csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error) {
 				continue;  // this line deleted
 			}
 
-			for (size_t ii = 0; ii < infos.len; ii++) {
-				ColumnInfo *info = &infos.array[ii];
+			for (size_t ii = 0; ii < where_infos.len; ii++) {
+				ColumnInfo *winfo = &where_infos.array[ii];
 
 				for (size_t ci = 0; ci < row.len; ci++) {
 					const char *col = row.columns[ci];
-					if (ci == info->index) {
+					if (ci == winfo->index) {
 						CsvTomatoValue val = string_to_value(col);
-						if (value_eq(&info->value, &val)) {
+						if (value_eq(&winfo->value, &val)) {
 							// match line 
-							printf("match: %s\n", col);
+							// printf("match: %s\n", col);
+
+							// replace
+							replace_row(model, &row, &set_infos, error);
 							csvline_array_push(&lines, row, error);
 							if (error->error) {
 								goto array_overflow;
@@ -695,7 +721,7 @@ csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error) {
 								head++;
 							}
 							*head = '1';  // __MODE__ column to 1 (delete)
-							printf("head[%s]\n", head);
+							// printf("head[%s]\n", head);
 						}
 					}
 				}
@@ -793,7 +819,7 @@ csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error) {
 		CsvTomatoValues *values = &model->values[i];
 
 		if (values->len != model->column_names_len) {
-			printf("%ld %ld %ld\n", model->values_len, values->len, model->column_names_len);
+			// printf("%ld %ld %ld\n", model->values_len, values->len, model->column_names_len);
 			goto invalid_values_len;
 		}
 
