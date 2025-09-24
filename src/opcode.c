@@ -25,6 +25,7 @@ static void
 destroy_elem(CsvTomatoOpcodeElem *elem) {
 	switch (elem->kind) {
 	case CSVTMT_OP_NONE: break;
+	case CSVTMT_OP_PLACE_HOLDER: break;
 	case CSVTMT_OP_ASSIGN: break;
 	case CSVTMT_OP_CREATE_TABLE_STMT_BEG:
 		free(elem->obj.create_table_stmt.table_name);

@@ -307,8 +307,8 @@ fail_gen_id:
 static void
 value_to_string(CsvTomatoValue *self, char *buf, size_t buf_size, const char **str) {
 	switch (self->kind) {
-	case CSVTMT_VAL_NONE:
-		break;
+	case CSVTMT_VAL_PLACE_HOLDER:
+	case CSVTMT_VAL_NONE: break;
 	case CSVTMT_VAL_INT:
 		snprintf(buf, buf_size, "%ld", self->int_value);
 		break;
@@ -377,7 +377,8 @@ string_to_value(const char *str) {
 static bool
 value_eq(const CsvTomatoValue *lhs, const CsvTomatoValue *rhs) {
 	switch (lhs->kind) {
-	case CSVTMT_VAL_NONE: return false; break;
+	case CSVTMT_VAL_NONE: 
+	case CSVTMT_VAL_PLACE_HOLDER: return false; break;
 	case CSVTMT_VAL_INT:
 		switch (rhs->kind) {
 		default: return false; break;
