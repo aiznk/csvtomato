@@ -1,6 +1,12 @@
 #include "../csvtomato.h"
 #include <assert.h>
 
+#undef clear
+#define clear(table_name) {\
+	csvtmt_file_remove("test_db/" table_name ".csv");\
+	csvtmt_file_remove("test_db/id/" table_name "__id.txt");\
+}\
+
 // ヘルパー：文字列を FILE* に流し込む
 FILE *
 make_stream(const char *s) {
@@ -182,17 +188,28 @@ test_csv(void) {
     parse_string("x,y,z", exp27, 3);
 	}
 
+void
+assert_file(const char *path, const char *s) {
+	char *content = csvtmt_file_read(path);
+	assert(content);
+	assert(!strcmp(content, s));
+	free(content);
+}
+
 void 
 test_tomato(void) {
 	CsvTomatoError error = {0};
 	CsvTomato *db;
 	CsvTomatoStmt *stmt;
 
-	db = csvtmt_open("db_dir", &error);
+	db = csvtmt_open("test_db", &error);
+	assert(db);
 	if (error.error) {
 		fprintf(stderr, "%s\n", error.message);
 		return;
 	}
+
+	clear("users");
 
 	csvtmt_execute(
 		db,
@@ -203,19 +220,41 @@ test_tomato(void) {
 		")",
 		&error
 	);
+	assert(!error.error);
 
-	csvtmt_execute(db, "INSERT INTO users (name, age) VALUES (\"Alice\", 20);", &error);
+	csvtmt_execute(
+		db,
+		"INSERT INTO users (name, age) VALUES (\"Alice\", 20);",
+		&error
+	);
+	assert(!error.error);
 
-	csvtmt_prepare(db, "INSERT INTO users (name, age) VALUES (?, ?);", &stmt, &error);
+	csvtmt_prepare(
+		db,
+		"INSERT INTO users (name, age) VALUES (?, ?);",
+		&stmt,
+		&error
+	);
+	assert(!error.error);
 
 	csvtmt_bind_text(stmt, 1, "Bob", -1, CSVTMT_TRANSTENT, &error);
+	assert(!error.error);
 	csvtmt_bind_int(stmt, 2, 30, &error);
+	assert(!error.error);
 
 	// 実行
 	csvtmt_step(stmt, &error);
+	assert(!error.error);
 
 	csvtmt_finalize(stmt);
 	csvtmt_close(db);
+
+	assert_file(
+		"test_db/users.csv",
+		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
+		"0,1,Alice,20\n"
+		"0,2,Bob,30\n"
+		);
 }
 
 void
@@ -371,12 +410,6 @@ test_executor(void) {
 		e = NULL;\
 	}\
 
-	#undef clear
-	#define clear(table_name) {\
-		csvtmt_file_remove("test_db/" table_name ".csv");\
-		csvtmt_file_remove("test_db/id/" table_name "__id.txt");\
-	}\
-
 	#undef exec
 	#define exec(query, hope) {\
 		setup();\
@@ -506,11 +539,11 @@ test_executor(void) {
 
 int 
 main(void) {
-	// test_tomato();	
+	test_tomato();	
 	// test_csv();
 	// test_tokenizer();
 	// test_parser();
 	// test_opcode();
-	test_executor();
+	// test_executor();
 	return 0;
 }

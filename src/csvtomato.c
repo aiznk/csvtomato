@@ -77,12 +77,54 @@ csvtmt_close(CsvTomato *self) {
 	free(self);
 }
 
+static void
+clear_all(CsvTomato *self, CsvTomatoError *error) {
+	csvtmt_token_del_all(self->token);
+	csvtmt_node_del_all(self->node);
+	csvtmt_parser_del(self->parser);
+	csvtmt_tokenizer_del(self->tokenizer);
+	csvtmt_opcode_del(self->opcode);
+	csvtmt_executor_del(self->executor);
+
+	self->token = NULL; 
+	self->node = NULL;
+
+	self->tokenizer = csvtmt_tokenizer_new(error);
+	if (error->error) {
+		goto fail;
+	}
+
+	self->parser = csvtmt_parser_new(error);
+	if (error->error) {
+		goto fail;
+	}
+
+	self->opcode = csvtmt_opcode_new(error);
+	if (error->error) {
+		goto fail;		
+	}
+
+	self->executor = csvtmt_executor_new(error);
+	if (error->error) {
+		goto fail;		
+	}
+
+	return;
+fail:
+	return;
+}
+
 void
 csvtmt_execute(
 	CsvTomato *self,
 	const char *query,
 	CsvTomatoError *error
 ) {
+	clear_all(self, error);
+	if (error->error) {
+		return;
+	}
+
 	self->token = csvtmt_tokenizer_tokenize(
 		self->tokenizer,
 		query,
@@ -129,15 +171,14 @@ csvtmt_prepare(
 	CsvTomatoStmt **stmt, 
 	CsvTomatoError *error
 ) {
-	if (*stmt) {
-		csvtmt_stmt_del(*stmt);
-		*stmt = csvtmt_stmt_new(error);
-		if (error->error) {
-			return;
-		}
+	*stmt = csvtmt_stmt_new(error);
+	if (error->error) {
+		return;
 	}
 
 	CsvTomatoStmt *s = *stmt;
+
+	snprintf(s->model.db_dir, sizeof s->model.db_dir, "%s", self->model.db_dir);
 	
 	s->tokenizer = csvtmt_tokenizer_new(error);
 	if (error->error) {
@@ -159,8 +200,8 @@ csvtmt_prepare(
 		goto fail;		
 	}
 
-	self->token = csvtmt_tokenizer_tokenize(
-		self->tokenizer,
+	s->token = csvtmt_tokenizer_tokenize(
+		s->tokenizer,
 		query,
 		error
 	);
@@ -168,9 +209,9 @@ csvtmt_prepare(
 		goto fail;		
 	}
 
-	self->node = csvtmt_parser_parse(
-		self->parser,
-		self->token,
+	s->node = csvtmt_parser_parse(
+		s->parser,
+		s->token,
 		error
 	);
 	if (error->error) {
@@ -178,8 +219,8 @@ csvtmt_prepare(
 	}
 
 	csvtmt_opcode_parse(
-		self->opcode,
-		self->node,
+		s->opcode,
+		s->node,
 		error
 	);
 	if (error->error) {
@@ -211,25 +252,116 @@ csvtmt_bind_text(
 	void (*destructor)(void*),
 	CsvTomatoError *error
 ) {
+	size_t count = 1;
 
+	assert(stmt);
+	assert(stmt->opcode);
+	for (size_t i = 0; i < stmt->opcode->len; i++) {
+		CsvTomatoOpcodeElem *elem = &stmt->opcode->elems[i];
+		if (elem->kind == CSVTMT_OP_PLACE_HOLDER ||
+			elem->old_kind == CSVTMT_OP_PLACE_HOLDER) {
+			if (count == index) {
+				elem->old_kind = elem->kind;
+				elem->kind = CSVTMT_OP_STRING_VALUE;
+				if (size == -1) {
+					elem->obj.string_value.value = csvtmt_strdup(text, error);
+				} else {
+					char *s = calloc(size, sizeof(char));
+					if (!s) {
+						goto failed_to_calloc;
+					}
+
+					snprintf(s, size-1, "%s", text);
+
+					elem->obj.string_value.value = csvtmt_move(s);
+					elem->obj.string_value.destructor = destructor;
+				}
+				if (error->error) {
+					return;
+				}
+				// puts("bind text");
+				break;
+			}
+			count++;
+		}
+	}
+
+	return;
+failed_to_calloc:
+	csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
+	return;
 }
 
 void
 csvtmt_bind_int(
 	CsvTomatoStmt *stmt,
 	size_t index, 
-	ssize_t value, 
+	int64_t value, 
 	CsvTomatoError *error
 ) {
+	size_t count = 1;
 
+	for (size_t i = 0; i < stmt->opcode->len; i++) {
+		CsvTomatoOpcodeElem *elem = &stmt->opcode->elems[i];
+		if (elem->kind == CSVTMT_OP_PLACE_HOLDER ||
+			elem->old_kind == CSVTMT_OP_PLACE_HOLDER) {
+			if (count == index) {
+				elem->old_kind = elem->kind;
+				elem->kind = CSVTMT_OP_INT_VALUE;
+				elem->obj.int_value.value = value;
+				if (error->error) {
+					return;
+				}
+				// puts("bind int");
+				break;
+			}
+			count++;
+		}
+	}
+}
+
+void
+csvtmt_bind_float(
+	CsvTomatoStmt *stmt,
+	size_t index, 
+	double value, 
+	CsvTomatoError *error
+) {
+	size_t count = 1;
+
+	for (size_t i = 0; i < stmt->opcode->len; i++) {
+		CsvTomatoOpcodeElem *elem = &stmt->opcode->elems[i];
+		if (elem->kind == CSVTMT_OP_PLACE_HOLDER ||
+			elem->old_kind == CSVTMT_OP_PLACE_HOLDER) {
+			if (count == index) {
+				elem->old_kind = elem->kind;
+				elem->kind = CSVTMT_OP_FLOAT_VALUE;
+				elem->obj.float_value.value = value;
+				if (error->error) {
+					return;
+				}
+				break;
+			}
+			count++;
+		}
+	}
 }
 
 void
 csvtmt_step(CsvTomatoStmt *stmt, CsvTomatoError *error) {
-
+	csvtmt_executor_exec(
+		stmt->executor,
+		&stmt->model,
+		stmt->opcode->elems,
+		stmt->opcode->len,
+		error
+	);
+	if (error->error) {
+		return;
+	}
 }
 
 void
 csvtmt_finalize(CsvTomatoStmt *stmt) {
-
+	csvtmt_stmt_del(stmt);
 }

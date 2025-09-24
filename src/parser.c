@@ -933,13 +933,12 @@ parse_expr(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error)
 	if (n2) {
 		n1->obj.expr.string = n2;
 		return n1;
-	} else {
-		goto fail;
 	}
 
 	if (kind(token) == CSVTMT_TK_PLACE_HOLDER) {
 		next(token);
 		n1->obj.expr.place_holder = true;
+		return n1;
 	}
 
 fail:
