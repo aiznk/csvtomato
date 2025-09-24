@@ -48,7 +48,8 @@ csvtmt_quick_exec(const char *db_dir, const char *query) {
 	csvtmt_opcode_parse(o, node, &error);
 	check_error();
 
-	csvtmt_executor_exec(e, &model, db_dir, o->elems, o->len, &error);
+	snprintf(model.db_dir, sizeof model.db_dir, "%s", db_dir);
+	csvtmt_executor_exec(e, &model, o->elems, o->len, &error);
 	check_error();
 
 	csvtmt_token_del_all(token);

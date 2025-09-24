@@ -25,7 +25,6 @@ void
 csvtmt_executor_exec(
 	CsvTomatoExecutor *self,
 	CsvTomatoModel *model,
-	const char *db_dir,
 	const CsvTomatoOpcodeElem *opcodes,
 	size_t opcodes_len,
 	CsvTomatoError *error
@@ -63,9 +62,12 @@ csvtmt_executor_exec(
 		dst = model->stack[--model->stack_len];\
 	}\
 
-	memset(model, 0, sizeof(*model));
+	memset(model->values, 0, sizeof(model->values));
+	memset(&model->header, 0, sizeof(model->header));
+	memset(model->update_set_key_values, 0, sizeof(model->update_set_key_values));
+	memset(model->where_key_values, 0, sizeof(model->where_key_values));
+	memset(model->stack, 0, sizeof(model->stack));
 
-	snprintf(model->db_dir, sizeof model->db_dir, "%s", db_dir);
 	model->buf = csvtmt_str_new();
 	if (!model->buf) {
 		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate buffer: %s", strerror(errno));
@@ -74,6 +76,7 @@ csvtmt_executor_exec(
 
 	CsvTomatoOpcodeKind op_kind;
 	CsvTomatoStackElem pop;
+
 	model->stack_len = 0;
 
 	for (size_t i = 0; i < opcodes_len; i++) {

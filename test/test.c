@@ -348,6 +348,7 @@ test_executor(void) {
 	#undef setup
 	#define setup() {\
 		csvtmt_error_clear(&error);\
+		snprintf(model.db_dir, sizeof model.db_dir, "test_db");\
 		t = csvtmt_tokenizer_new(&error);\
 		p = csvtmt_parser_new(&error);\
 		o = csvtmt_opcode_new(&error);\
@@ -385,7 +386,7 @@ test_executor(void) {
 		die();\
 		csvtmt_opcode_parse(o, node, &error);\
 		die();\
-		csvtmt_executor_exec(e, &model, "test_db", o->elems, o->len, &error);\
+		csvtmt_executor_exec(e, &model, o->elems, o->len, &error);\
 		die();\
 		FILE *fp = fopen(model.table_path, "r");\
 		char buf[1024];\
@@ -408,7 +409,7 @@ test_executor(void) {
 		die();\
 		csvtmt_opcode_parse(o, node, &error);\
 		die();\
-		csvtmt_executor_exec(e, &model, "test_db", o->elems, o->len, &error);\
+		csvtmt_executor_exec(e, &model, o->elems, o->len, &error);\
 		cleanup();\
 	}\
 

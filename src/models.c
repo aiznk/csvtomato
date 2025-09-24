@@ -630,23 +630,12 @@ where_match(ColumnInfoArray *where_infos, CsvTomatoCsvLine *row) {
 
 void
 csvtmt_delete(CsvTomatoModel *model, CsvTomatoError *error) {
-	const char *not_found = NULL;
 	bool has_where = model->where_key_values_len;
 	CsvTomatoCsvLine row = {0};
 	
 	header_read_from_table(&model->header, model->table_path, error);
 	if (error->error) {
 		goto failed_to_header_read;
-	}
-
-	not_found = header_has_key_values_types(
-		&model->header,
-		model->update_set_key_values,
-		model->update_set_key_values_len,
-		error
-	);
-	if (not_found) {
-		goto invalid_key_values_type;
 	}
 
 	char *ptr;
@@ -778,9 +767,6 @@ failed_to_mmap:
 	return;
 failed_to_open_table:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to open table %s. %s", model->table_path, strerror(errno));
-	return;
-invalid_key_values_type:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid update key. \"%s\" is not in header types", not_found);
 	return;
 }
 
@@ -1000,7 +986,7 @@ csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error) {
 		CsvTomatoValues *values = &model->values[i];
 
 		if (values->len != model->column_names_len) {
-			// printf("%ld %ld %ld\n", model->values_len, values->len, model->column_names_len);
+			printf("%ld %ld %ld\n", model->values_len, values->len, model->column_names_len);
 			goto invalid_values_len;
 		}
 
