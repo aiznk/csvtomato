@@ -205,7 +205,7 @@ test_tomato(void) {
 	db = csvtmt_open("test_db", &error);
 	assert(db);
 	if (error.error) {
-		fprintf(stderr, "%s\n", error.message);
+		csvtmt_error_show(&error);
 		return;
 	}
 
@@ -217,7 +217,7 @@ test_tomato(void) {
 		"	id INTEGER PRIMARY KEY AUTOINCREMENT,"
 		"	name TEXT NOT NULL,"
 		"	age INTEGER"
-		")",
+		");",
 		&error
 	);
 	assert(!error.error);
