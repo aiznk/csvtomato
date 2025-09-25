@@ -211,7 +211,7 @@ test_tomato(void) {
 
 	clear("users");
 
-	csvtmt_execute(
+	csvtmt_exec(
 		db,
 		"CREATE TABLE IF NOT EXISTS users ("
 		"	id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -222,7 +222,7 @@ test_tomato(void) {
 	);
 	assert(!error.error);
 
-	csvtmt_execute(
+	csvtmt_exec(
 		db,
 		"INSERT INTO users (name, age) VALUES (\"Alice\", 20);",
 		&error

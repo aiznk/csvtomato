@@ -4,11 +4,36 @@ CsvTomatoStmt *
 csvtmt_stmt_new(CsvTomatoError *error) {
 	CsvTomatoStmt *self = calloc(1, sizeof(*self));
 	if (!self) {
-		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory");
-		return NULL;
+		goto failed_to_calloc;
+	}
+
+	self->tokenizer = csvtmt_tokenizer_new(error);
+	if (error->error) {
+		goto fail;
+	}
+
+	self->parser = csvtmt_parser_new(error);
+	if (error->error) {
+		goto fail;
+	}
+
+	self->opcode = csvtmt_opcode_new(error);
+	if (error->error) {
+		goto fail;		
+	}
+
+	self->executor = csvtmt_executor_new(error);
+	if (error->error) {
+		goto fail;		
 	}
 
 	return self;
+fail:
+	csvtmt_stmt_del(self);
+	return NULL;
+failed_to_calloc:
+	csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory");
+	return NULL;
 }
 
 void
@@ -20,6 +45,63 @@ csvtmt_stmt_del(CsvTomatoStmt *self) {
 	csvtmt_opcode_del(self->opcode);
 	csvtmt_executor_del(self->executor);
 	free(self);
+}
+
+CsvTomatoResult
+csvtmt_stmt_step(CsvTomatoStmt *self, CsvTomatoError *error) {
+	CsvTomatoResult result = csvtmt_executor_exec(
+		self->executor,
+		&self->model,
+		self->opcode->elems,
+		self->opcode->len,
+		error
+	);
+	if (error->error) {
+		goto fail;
+	}
+
+	return result;
+fail:
+	return CSVTMT_ERROR;
+}
+
+
+CsvTomatoResult
+csvtmt_stmt_prepare(
+	CsvTomatoStmt *self,
+	const char *query,
+	CsvTomatoError *error
+) {
+	self->token = csvtmt_tokenizer_tokenize(
+		self->tokenizer,
+		query,
+		error
+	);
+	if (error->error) {
+		goto fail;		
+	}
+
+	self->node = csvtmt_parser_parse(
+		self->parser,
+		self->token,
+		error
+	);
+	if (error->error) {
+		goto fail;		
+	}
+
+	csvtmt_opcode_parse(
+		self->opcode,
+		self->node,
+		error
+	);
+	if (error->error) {
+		goto fail;
+	}
+
+	return CSVTMT_OK;
+fail:
+	return CSVTMT_ERROR;
 }
 
 CsvTomato *
@@ -34,32 +116,9 @@ csvtmt_open(
 		return NULL;
 	}
 
-	snprintf(self->model.db_dir, sizeof self->model.db_dir, "%s", db_dir);
-
-	self->tokenizer = csvtmt_tokenizer_new(error);
-	if (error->error) {
-		goto fail;
-	}
-
-	self->parser = csvtmt_parser_new(error);
-	if (error->error) {
-		goto fail;
-	}
-
-	self->opcode = csvtmt_opcode_new(error);
-	if (error->error) {
-		goto fail;		
-	}
-
-	self->executor = csvtmt_executor_new(error);
-	if (error->error) {
-		goto fail;		
-	}
+	snprintf(self->db_dir, sizeof self->db_dir, "%s", db_dir);
 
 	return self;
-fail:
-	csvtmt_close(self);
-	return NULL;
 }
 
 void
@@ -68,103 +127,40 @@ csvtmt_close(CsvTomato *self) {
 		return;
 	}
 
-	csvtmt_token_del_all(self->token);
-	csvtmt_node_del_all(self->node);
-	csvtmt_parser_del(self->parser);
-	csvtmt_tokenizer_del(self->tokenizer);
-	csvtmt_opcode_del(self->opcode);
-	csvtmt_executor_del(self->executor);
 	free(self);
 }
 
-static void
-clear_all(CsvTomato *self, CsvTomatoError *error) {
-	csvtmt_token_del_all(self->token);
-	csvtmt_node_del_all(self->node);
-	csvtmt_parser_del(self->parser);
-	csvtmt_tokenizer_del(self->tokenizer);
-	csvtmt_opcode_del(self->opcode);
-	csvtmt_executor_del(self->executor);
-
-	self->token = NULL; 
-	self->node = NULL;
-
-	self->tokenizer = csvtmt_tokenizer_new(error);
-	if (error->error) {
-		goto fail;
-	}
-
-	self->parser = csvtmt_parser_new(error);
-	if (error->error) {
-		goto fail;
-	}
-
-	self->opcode = csvtmt_opcode_new(error);
-	if (error->error) {
-		goto fail;		
-	}
-
-	self->executor = csvtmt_executor_new(error);
-	if (error->error) {
-		goto fail;		
-	}
-
-	return;
-fail:
-	return;
-}
-
-void
-csvtmt_execute(
+CsvTomatoResult
+csvtmt_exec(
 	CsvTomato *self,
 	const char *query,
 	CsvTomatoError *error
 ) {
-	clear_all(self, error);
+	CsvTomatoResult result;
+
+	CsvTomatoStmt *stmt = csvtmt_stmt_new(error);
 	if (error->error) {
-		return;
+		goto fail;
 	}
 
-	self->token = csvtmt_tokenizer_tokenize(
-		self->tokenizer,
-		query,
-		error
-	);
+	csvtmt_stmt_prepare(stmt, query, error);
 	if (error->error) {
-		return;
+		goto fail;
 	}
 
-	self->node = csvtmt_parser_parse(
-		self->parser,
-		self->token,
-		error
-	);
+	result = csvtmt_stmt_step(stmt, error);
 	if (error->error) {
-		return;
+		goto fail;
 	}
 
-	csvtmt_opcode_parse(
-		self->opcode,
-		self->node,
-		error
-	);
-	if (error->error) {
-		return;
-	}
+	csvtmt_stmt_del(stmt);
 
-	csvtmt_executor_exec(
-		self->executor,
-		&self->model,
-		self->opcode->elems,
-		self->opcode->len,
-		error
-	);
-	if (error->error) {
-		return;
-	}
+	return result;
+fail:
+	return CSVTMT_ERROR;
 }
 
-void
+CsvTomatoResult
 csvtmt_prepare(
 	CsvTomato *self, 
 	const char *query, 
@@ -173,64 +169,14 @@ csvtmt_prepare(
 ) {
 	*stmt = csvtmt_stmt_new(error);
 	if (error->error) {
-		return;
+		return CSVTMT_ERROR;
 	}
 
 	CsvTomatoStmt *s = *stmt;
 
-	snprintf(s->model.db_dir, sizeof s->model.db_dir, "%s", self->model.db_dir);
-	
-	s->tokenizer = csvtmt_tokenizer_new(error);
-	if (error->error) {
-		goto fail;
-	}
+	snprintf(s->model.db_dir, sizeof s->model.db_dir, "%s", self->db_dir);
 
-	s->parser = csvtmt_parser_new(error);
-	if (error->error) {
-		goto fail;
-	}
-
-	s->opcode = csvtmt_opcode_new(error);
-	if (error->error) {
-		goto fail;		
-	}
-
-	s->executor = csvtmt_executor_new(error);
-	if (error->error) {
-		goto fail;		
-	}
-
-	s->token = csvtmt_tokenizer_tokenize(
-		s->tokenizer,
-		query,
-		error
-	);
-	if (error->error) {
-		goto fail;		
-	}
-
-	s->node = csvtmt_parser_parse(
-		s->parser,
-		s->token,
-		error
-	);
-	if (error->error) {
-		goto fail;		
-	}
-
-	csvtmt_opcode_parse(
-		s->opcode,
-		s->node,
-		error
-	);
-	if (error->error) {
-		goto fail;
-	}
-
-	return;
-fail:
-	csvtmt_stmt_del(*stmt);
-	return;
+	return csvtmt_stmt_prepare(s, query, error);
 }
 
 void
@@ -347,9 +293,11 @@ csvtmt_bind_float(
 	}
 }
 
-void
+CsvTomatoResult
 csvtmt_step(CsvTomatoStmt *stmt, CsvTomatoError *error) {
-	csvtmt_executor_exec(
+	CsvTomatoResult result;
+
+	result = csvtmt_executor_exec(
 		stmt->executor,
 		&stmt->model,
 		stmt->opcode->elems,
@@ -357,8 +305,9 @@ csvtmt_step(CsvTomatoStmt *stmt, CsvTomatoError *error) {
 		error
 	);
 	if (error->error) {
-		return;
+		return CSVTMT_ERROR;
 	}
+	return result;
 }
 
 void
