@@ -21,7 +21,7 @@ csvtmt_executor_del(CsvTomatoExecutor *self) {
 	free(self);
 }
 
-void
+CsvTomatoResult
 csvtmt_executor_exec(
 	CsvTomatoExecutor *self,
 	CsvTomatoModel *model,
@@ -36,8 +36,8 @@ csvtmt_executor_exec(
 	}\
 
 	#define cleanup() {\
-		csvtmt_str_del(model->buf);\
-		model->buf = NULL;\
+		csvtmt_str_del(buf);\
+		buf = NULL;\
 	}\
 
 	#define stack_push(o) {\
@@ -62,16 +62,9 @@ csvtmt_executor_exec(
 		dst = model->stack[--model->stack_len];\
 	}\
 
-	memset(model->values, 0, sizeof(model->values));
-	memset(&model->header, 0, sizeof(model->header));
-	memset(model->update_set_key_values, 0, sizeof(model->update_set_key_values));
-	memset(model->where_key_values, 0, sizeof(model->where_key_values));
-	memset(model->stack, 0, sizeof(model->stack));
-
-	model->buf = csvtmt_str_new();
-	if (!model->buf) {
-		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate buffer: %s", strerror(errno));
-		return;
+	CsvTomatoString *buf = csvtmt_str_new();
+	if (!buf) {
+		goto failed_to_allocate_buffer;
 	}
 
 	CsvTomatoOpcodeKind op_kind;
@@ -79,7 +72,7 @@ csvtmt_executor_exec(
 
 	model->stack_len = 0;
 
-	for (size_t i = 0; i < opcodes_len; i++) {
+	for (size_t i = model->opcodes_index; i < opcodes_len; i++) {
 		const CsvTomatoOpcodeElem *op = &opcodes[i];
 
 		switch (op->kind) {
@@ -316,8 +309,8 @@ csvtmt_executor_exec(
 			} else {
 				model->do_create_table = true;
 				// 論理削除カラム（予約カラム）をヘッダにセット。
-				csvtmt_str_append(model->buf, CSVTMT_COL_MODE);
-				csvtmt_str_append(model->buf, ",");
+				csvtmt_str_append(buf, CSVTMT_COL_MODE);
+				csvtmt_str_append(buf, ",");
 			}
 		} break;
 		case CSVTMT_OP_CREATE_TABLE_STMT_END: {
@@ -326,19 +319,18 @@ csvtmt_executor_exec(
 			}
 
 			// buf stored column def strings
-			csvtmt_str_pop_back(model->buf); // last ,
+			csvtmt_str_pop_back(buf); // last ,
 
 			errno = 0;
 			FILE *fp = fopen(model->table_path, "w");
 			if (!fp) {
-				csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to open table %s: %s", model->table_path, strerror(errno));
-				return;
+				goto failed_to_open_table;
 			}
 
-			fprintf(fp, "%s\n", model->buf->str);
+			fprintf(fp, "%s\n", buf->str);
 
 			fclose(fp);
-			csvtmt_str_clear(model->buf);
+			csvtmt_str_clear(buf);
 
 			model->do_create_table = false;
 		} break;
@@ -348,75 +340,83 @@ csvtmt_executor_exec(
 			}
 
 			const char *column_name = op->obj.column_def.column_name;
-			csvtmt_str_append(model->buf, column_name);
+			csvtmt_str_append(buf, column_name);
 
 			const CsvTomatoTokenKind type_name = op->obj.column_def.type_name;
 			switch (type_name) {
 			default: 
 				goto invalid_type_name;
 				break;
-			case CSVTMT_TK_INTEGER: csvtmt_str_append(model->buf, " INTEGER"); break;
-			case CSVTMT_TK_TEXT: csvtmt_str_append(model->buf, " TEXT"); break;
+			case CSVTMT_TK_INTEGER: csvtmt_str_append(buf, " INTEGER"); break;
+			case CSVTMT_TK_TEXT: csvtmt_str_append(buf, " TEXT"); break;
 			}
 
 			if (op->obj.column_def.primary &&
 				op->obj.column_def.key) {
-				csvtmt_str_append(model->buf, " PRIMARY KEY");
+				csvtmt_str_append(buf, " PRIMARY KEY");
 			}
 			if (op->obj.column_def.autoincrement) {
-				csvtmt_str_append(model->buf, " AUTOINCREMENT");
+				csvtmt_str_append(buf, " AUTOINCREMENT");
 			}
 			if (op->obj.column_def.not_ &&
 				op->obj.column_def.null) {
-				csvtmt_str_append(model->buf, " NOT NULL");
+				csvtmt_str_append(buf, " NOT NULL");
 			}
 
-			csvtmt_str_push_back(model->buf, ',');
+			csvtmt_str_push_back(buf, ',');
 		} break;
 		}
 	}
 
 	cleanup();
-	return;
+	return CSVTMT_OK;
+failed_to_open_table:
+	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to open table %s: %s", model->table_path, strerror(errno));
+	cleanup();
+	return CSVTMT_ERROR;
+failed_to_allocate_buffer:
+	csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate buffer: %s", strerror(errno));
+	cleanup();
+	return CSVTMT_ERROR;
 found_place_holder:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "found place holder");
 	cleanup();
-	return;
+	return CSVTMT_ERROR;
 table_already_exists:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "table %s already exists", model->table_name);
 	cleanup();
-	return;
+	return CSVTMT_ERROR;
 invalid_type_name:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid type name");
 	cleanup();
-	return;
+	return CSVTMT_ERROR;
 stack_overflow:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "stack overflow");
 	cleanup();
-	return;
+	return CSVTMT_ERROR;
 stack_underflow:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "stack underflow");
 	cleanup();
-	return;
+	return CSVTMT_ERROR;
 invalid_stack_elem_kind:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid stack element kind");
 	cleanup();
-	return;
+	return CSVTMT_ERROR;
 update_error:
 	cleanup();
-	return;	
+	return CSVTMT_ERROR;	
 insert_error:
 	cleanup();
-	return;	
+	return CSVTMT_ERROR;	
 delete_error:
 	cleanup();
-	return;	
+	return CSVTMT_ERROR;	
 array_overflow:
 	csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "array overflow");
 	cleanup();
-	return;
+	return CSVTMT_ERROR;
 invalid_op_kind:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid op kind %d", op_kind);
 	cleanup();
-	return;
+	return CSVTMT_ERROR;
 }

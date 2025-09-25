@@ -34,6 +34,12 @@ DECL_STRING(CsvTomatoString, csvtmt_str, char)
 * constants *
 ************/
 
+typedef enum {
+	CSVTMT_OK,
+	CSVTMT_ERROR,
+	CSVTMT_DONE,
+} CsvTomatoResult;
+
 enum {
 	CSVTMT_ERR_MSG_SIZE = 256,
 	CSVTMT_STR_SIZE = 256,
@@ -463,6 +469,9 @@ struct CsvTomatoHeader {
 
 struct CsvTomatoModel {
 	char db_dir[CSVTMT_PATH_SIZE];
+	size_t opcodes_index;
+	CsvTomatoStackElem stack[CSVTMT_EXEC_STACK_SIZE];
+	size_t stack_len;
 	const char *table_name;
 	char table_path[CSVTMT_PATH_SIZE];
 	bool do_create_table;
@@ -471,23 +480,14 @@ struct CsvTomatoModel {
 	CsvTomatoValues values[CSVTMT_VALUES_ARRAY_SIZE];
 	size_t values_len;
 	CsvTomatoHeader header;
-	CsvTomatoString *buf;
 	CsvTomatoKeyValue update_set_key_values[CSVTMT_ASSIGNS_ARRAY_SIZE];
 	size_t update_set_key_values_len;
 	CsvTomatoKeyValue where_key_values[CSVTMT_ASSIGNS_ARRAY_SIZE];
 	size_t where_key_values_len;
-	CsvTomatoStackElem stack[CSVTMT_EXEC_STACK_SIZE];
-	size_t stack_len;
 };
 
 struct CsvTomato {
-	CsvTomatoTokenizer *tokenizer;
-	CsvTomatoParser *parser;
-	CsvTomatoExecutor *executor;
-	CsvTomatoOpcode *opcode;
-	CsvTomatoToken *token;
-	CsvTomatoNode *node;
-	CsvTomatoModel model;
+	char db_dir[CSVTMT_PATH_SIZE];
 };
 
 struct CsvTomatoStmt {
@@ -536,17 +536,29 @@ csvtmt_die(const char *s);
 
 // csvtomato.c
 
+CsvTomatoStmt *
+csvtmt_stmt_new(CsvTomatoError *error);
+
+void
+csvtmt_stmt_del(CsvTomatoStmt *self);
+
+CsvTomatoResult
+csvtmt_stmt_prepare(CsvTomatoStmt *self, const char *query, CsvTomatoError *error);
+
+CsvTomatoResult
+csvtmt_stmt_step(CsvTomatoStmt *self, CsvTomatoError *error);
+
 CsvTomato *
 csvtmt_open(const char *db_dir, CsvTomatoError *error);
 
-void
-csvtmt_execute(
+CsvTomatoResult
+csvtmt_exec(
 	CsvTomato *db,
 	const char *query,
 	CsvTomatoError *error
 );
 
-void
+CsvTomatoResult
 csvtmt_prepare(
 	CsvTomato *db, 
 	const char *query, 
@@ -586,7 +598,7 @@ csvtmt_bind_float(
 	CsvTomatoError *error
 );
 
-void
+CsvTomatoResult
 csvtmt_step(CsvTomatoStmt *stmt, CsvTomatoError *error);
 
 void
@@ -669,7 +681,7 @@ csvtmt_executor_new(CsvTomatoError *error);
 void
 csvtmt_executor_del(CsvTomatoExecutor *self);
 
-void
+CsvTomatoResult
 csvtmt_executor_exec(
 	CsvTomatoExecutor *self,
 	CsvTomatoModel *model,
@@ -753,11 +765,14 @@ csvtmt_csvline_destroy(CsvTomatoCsvLine *self);
 // models.c
 
 void
+csvtmt_model_init(CsvTomatoModel *self);
+
+CsvTomatoResult
 csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error);
 
-void
+CsvTomatoResult
 csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error);
 
-void
+CsvTomatoResult
 csvtmt_delete(CsvTomatoModel *model, CsvTomatoError *error);
 
