@@ -537,7 +537,7 @@ csvtmt_die(const char *s);
 // csvtomato.c
 
 CsvTomatoStmt *
-csvtmt_stmt_new(CsvTomatoError *error);
+csvtmt_stmt_new(const char *db_dir, CsvTomatoError *error);
 
 void
 csvtmt_stmt_del(CsvTomatoStmt *self);
@@ -765,7 +765,7 @@ csvtmt_csvline_destroy(CsvTomatoCsvLine *self);
 // models.c
 
 void
-csvtmt_model_init(CsvTomatoModel *self);
+csvtmt_model_init(CsvTomatoModel *self, const char *db_dir, CsvTomatoError *error);
 
 CsvTomatoResult
 csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error);

@@ -42,8 +42,13 @@ impl_static_array(colinfo_array, ColumnInfoArray, ColumnInfo)
 impl_static_array(csvline_array, CsvLineArray, CsvTomatoCsvLine)
 
 void
-csvtmt_model_init(CsvTomatoModel *self) {
+csvtmt_model_init(
+	CsvTomatoModel *self,
+	const char *db_dir,
+	CsvTomatoError *error
+) {
 	memset(self, 0, sizeof(*self));
+	snprintf(self->db_dir, sizeof self->db_dir, "%s", db_dir);
 }
 
 void

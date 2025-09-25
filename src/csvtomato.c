@@ -1,10 +1,15 @@
 #include <csvtomato.h>
 
 CsvTomatoStmt *
-csvtmt_stmt_new(CsvTomatoError *error) {
+csvtmt_stmt_new(const char *db_dir, CsvTomatoError *error) {
 	CsvTomatoStmt *self = calloc(1, sizeof(*self));
 	if (!self) {
 		goto failed_to_calloc;
+	}
+
+	csvtmt_model_init(&self->model, db_dir, error);
+	if (error->error) {
+		goto fail;
 	}
 
 	self->tokenizer = csvtmt_tokenizer_new(error);
@@ -138,7 +143,7 @@ csvtmt_exec(
 ) {
 	CsvTomatoResult result;
 
-	CsvTomatoStmt *stmt = csvtmt_stmt_new(error);
+	CsvTomatoStmt *stmt = csvtmt_stmt_new(self->db_dir, error);
 	if (error->error) {
 		goto fail;
 	}
@@ -167,16 +172,12 @@ csvtmt_prepare(
 	CsvTomatoStmt **stmt, 
 	CsvTomatoError *error
 ) {
-	*stmt = csvtmt_stmt_new(error);
+	*stmt = csvtmt_stmt_new(self->db_dir, error);
 	if (error->error) {
 		return CSVTMT_ERROR;
 	}
 
-	CsvTomatoStmt *s = *stmt;
-
-	snprintf(s->model.db_dir, sizeof s->model.db_dir, "%s", self->db_dir);
-
-	return csvtmt_stmt_prepare(s, query, error);
+	return csvtmt_stmt_prepare(*stmt, query, error);
 }
 
 void
