@@ -62,12 +62,10 @@ csvtmt_stmt_step(CsvTomatoStmt *self, CsvTomatoError *error) {
 		error
 	);
 	if (error->error) {
-		goto fail;
+		return CSVTMT_ERROR;
 	}
 
 	return result;
-fail:
-	return CSVTMT_ERROR;
 }
 
 
