@@ -56,6 +56,16 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 			csvtmt_node_del_all(rm);
 		}
 		break;
+	case CSVTMT_ND_SELECT_STMT:
+		free(self->obj.select_stmt.table_name);
+
+		for (CsvTomatoNode *cur = self->obj.select_stmt.column_name_list; cur; ) {
+			CsvTomatoNode *rm = cur;
+			cur = cur->next;
+			csvtmt_node_del_all(rm);
+		}
+		csvtmt_node_del_all(self->obj.select_stmt.where_expr);
+		break;
 	case CSVTMT_ND_INSERT_STMT:
 		free(self->obj.insert_stmt.table_name);
 
@@ -146,6 +156,7 @@ csvtmt_parser_del(CsvTomatoParser *self) {
 static CsvTomatoNode *parse_sql_stmt_list(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_sql_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_create_table_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
+static CsvTomatoNode *parse_select_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_insert_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_update_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_delete_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
@@ -268,6 +279,14 @@ parse_sql_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *er
 		goto fail;
 	}
 	if (n1->obj.sql_stmt.create_table_stmt) {
+		return n1;
+	}
+
+	n1->obj.sql_stmt.select_stmt = parse_select_stmt(self, token, error);
+	if (error->error) {
+		goto fail;
+	}
+	if (n1->obj.sql_stmt.select_stmt) {
 		return n1;
 	}
 
@@ -657,6 +676,87 @@ fail_allocate:
 	csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
 	csvtmt_node_del_all(n1);
 	return NULL;	
+}
+
+static CsvTomatoNode *
+parse_select_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error) {
+	if (kind(token) != CSVTMT_TK_SELECT) {
+		return NULL;
+	}
+	next(token);
+
+	CsvTomatoNode *n1 = csvtmt_node_new(CSVTMT_ND_SELECT_STMT, error);
+	if (error->error) {
+		goto failed_to_allocate_node;
+	}
+
+	CsvTomatoNode *column_name_list = parse_column_name(self, token, error);
+	if (error->error || !column_name_list) {
+		goto failed_to_parse_column_name;
+	}
+
+	for (; !is_end(token); ) {
+		if (kind(token) != CSVTMT_TK_COMMA) {
+			break;
+		}
+		next(token);
+
+		CsvTomatoNode *column_name = parse_column_name(self, token, error);
+		if (error->error || !column_name) {
+			csvtmt_node_del_all(column_name_list);
+			goto failed_to_parse_column_name;
+		}
+
+		node_push(column_name_list, column_name);
+	}
+
+	n1->obj.select_stmt.column_name_list = column_name_list;
+
+	if (kind(token) != CSVTMT_TK_FROM) {
+		goto not_found_from;
+	} else {
+		next(token);
+	}
+
+	if (kind(token) != CSVTMT_TK_IDENT) {
+		goto not_found_table_name;
+	} else {
+		n1->obj.select_stmt.table_name = csvtmt_strdup(text(token), error);
+		if (error->error) {
+			goto failed_to_strdup;
+		}
+	}
+	next(token);
+
+	if (kind(token) == CSVTMT_TK_WHERE) {
+		next(token);
+
+		n1->obj.select_stmt.where_expr = parse_expr(self, token, error);
+		if (error->error) {
+			goto failed_to_parse_expr;
+		}
+	}
+
+	return n1;
+
+failed_to_parse_expr:
+	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "failed to parse WHERE expression on select statement");
+	return NULL;
+failed_to_strdup:
+	csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to strdup on select statement");
+	return NULL;
+not_found_from:
+	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found FROM on select statement");
+	return NULL;
+failed_to_allocate_node:
+	csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate node on select statement");
+	return NULL;
+failed_to_parse_column_name:
+	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "failed to parse column name on select statement");
+	return NULL;
+not_found_table_name:
+	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found table name on select statement");
+	return NULL;
 }
 
 static CsvTomatoNode *

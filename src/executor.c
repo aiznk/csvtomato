@@ -101,6 +101,15 @@ csvtmt_executor_exec(
 				goto update_error;
 			}
 		} break;
+		case CSVTMT_OP_SELECT_STMT_BEG: {
+			model->table_name = op->obj.select_stmt.table_name;
+			model->column_names_len = 0;
+
+			snprintf(model->table_path, sizeof model->table_path, "%s/%s.csv", model->db_dir, model->table_name);
+		} break;
+		case CSVTMT_OP_SELECT_STMT_END: {
+			// TODO
+		} break;
 		case CSVTMT_OP_INSERT_STMT_BEG: {
 			model->table_name = op->obj.insert_stmt.table_name;
 			model->column_names_len = 0;
@@ -369,7 +378,8 @@ csvtmt_executor_exec(
 	}
 
 	cleanup();
-	return CSVTMT_OK;
+	return CSVTMT_DONE;
+
 failed_to_open_table:
 	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to open table %s: %s", model->table_path, strerror(errno));
 	cleanup();

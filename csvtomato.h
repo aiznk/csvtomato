@@ -109,6 +109,7 @@ typedef enum {
 	CSVTMT_ND_STMT_LIST,
 	CSVTMT_ND_STMT,
 	CSVTMT_ND_CREATE_TABLE_STMT,
+	CSVTMT_ND_SELECT_STMT,
 	CSVTMT_ND_INSERT_STMT,
 	CSVTMT_ND_UPDATE_STMT,
 	CSVTMT_ND_DELETE_STMT,
@@ -126,6 +127,8 @@ typedef enum {
 	CSVTMT_OP_NONE,
 	CSVTMT_OP_CREATE_TABLE_STMT_BEG,
 	CSVTMT_OP_CREATE_TABLE_STMT_END,
+	CSVTMT_OP_SELECT_STMT_BEG,
+	CSVTMT_OP_SELECT_STMT_END,
 	CSVTMT_OP_INSERT_STMT_BEG,
 	CSVTMT_OP_INSERT_STMT_END,
 	CSVTMT_OP_UPDATE_STMT_BEG,
@@ -263,6 +266,7 @@ struct CsvTomatoNode {
 		} sql_stmt_list;
 		struct {
 			struct CsvTomatoNode *create_table_stmt;
+			struct CsvTomatoNode *select_stmt;
 			struct CsvTomatoNode *insert_stmt;
 			struct CsvTomatoNode *update_stmt;
 			struct CsvTomatoNode *delete_stmt;
@@ -272,6 +276,11 @@ struct CsvTomatoNode {
 			struct CsvTomatoNode *column_def_list;
 			bool if_not_exists;
 		} create_table_stmt;
+		struct {
+			char *table_name;
+			struct CsvTomatoNode *column_name_list;
+			struct CsvTomatoNode *where_expr;
+		} select_stmt;
 		struct {
 			char *table_name;
 			struct CsvTomatoNode *column_name_list;
@@ -344,6 +353,9 @@ struct CsvTomatoOpcodeElem {
 			char *table_name;
 			bool if_not_exists;
 		} create_table_stmt;
+		struct {
+			char *table_name;
+		} select_stmt;
 		struct {
 			char *table_name;
 		} insert_stmt;
