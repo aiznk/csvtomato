@@ -38,6 +38,7 @@ typedef enum {
 	CSVTMT_OK,
 	CSVTMT_ERROR,
 	CSVTMT_DONE,
+	CSVTMT_ROW,
 } CsvTomatoResult;
 
 enum {
@@ -496,6 +497,13 @@ struct CsvTomatoModel {
 	size_t update_set_key_values_len;
 	CsvTomatoKeyValue where_key_values[CSVTMT_ASSIGNS_ARRAY_SIZE];
 	size_t where_key_values_len;
+	CsvTomatoCsvLine row;
+	struct {
+		char *ptr;
+		char *cur;
+		int fd;
+		size_t size;
+	} mmap;
 };
 
 struct CsvTomato {
@@ -612,6 +620,15 @@ csvtmt_bind_float(
 
 CsvTomatoResult
 csvtmt_step(CsvTomatoStmt *stmt, CsvTomatoError *error);
+
+int
+csvtmt_column_int(CsvTomatoStmt *stmt, size_t index, CsvTomatoError *error);
+
+double
+csvtmt_column_double(CsvTomatoStmt *stmt, size_t index, CsvTomatoError *error);
+
+const char *
+csvtmt_column_text(CsvTomatoStmt *stmt, size_t index, CsvTomatoError *error);
 
 void
 csvtmt_finalize(CsvTomatoStmt *stmt);
@@ -778,6 +795,12 @@ csvtmt_csvline_destroy(CsvTomatoCsvLine *self);
 
 void
 csvtmt_model_init(CsvTomatoModel *self, const char *db_dir, CsvTomatoError *error);
+
+void
+csvtmt_model_destroy(CsvTomatoModel *self);
+
+CsvTomatoResult
+csvtmt_select(CsvTomatoModel *model, CsvTomatoError *error);
 
 CsvTomatoResult
 csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error);

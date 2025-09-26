@@ -52,6 +52,17 @@ csvtmt_model_init(
 }
 
 void
+csvtmt_model_destroy(CsvTomatoModel *self) {
+	csvtmt_csvline_destroy(&self->row);
+	if (self->mmap.fd) {
+		munmap(self->mmap.ptr, self->mmap.size);
+		close(self->mmap.fd);
+		self->mmap.ptr = self->mmap.cur = NULL;
+		self->mmap.fd = 0;
+	}
+}
+
+void
 type_parse_type_def(CsvTomatoColumnType *self, const char *type_def, CsvTomatoError *error) {
 	if (strstr(type_def, "INTEGER")) {
 		self->type_def_info.integer =  true;
@@ -706,7 +717,7 @@ csvtmt_delete(CsvTomatoModel *model, CsvTomatoError *error) {
 			}
 			if (!strcmp(row.columns[0], "1")) {
 				csvtmt_csvline_destroy(&row);
-				continue;  // this line deleted
+				continue; // this line deleted
 			}
 
 			ColumnInfo *winfo = where_match(&where_infos, &row);
@@ -745,7 +756,7 @@ csvtmt_delete(CsvTomatoModel *model, CsvTomatoError *error) {
 			}
 			if (!strcmp(row.columns[0], "1")) {
 				csvtmt_csvline_destroy(&row);
-				continue;  // this line deleted
+				continue; // this line deleted
 			}
 			if (*head == '"') {
 				head++;
@@ -873,7 +884,7 @@ csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error) {
 			}
 			if (!strcmp(row.columns[0], "1")) {
 				csvtmt_csvline_destroy(&row);
-				continue;  // this line deleted
+				continue; // this line deleted
 			}
 
 			for (size_t ii = 0; ii < where_infos.len; ii++) {
@@ -899,7 +910,7 @@ csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error) {
 							if (*head == '"') {
 								head++;
 							}
-							*head = '1';  // __MODE__ column to 1 (delete)
+							*head = '1'; // __MODE__ column to 1 (delete)
 							// printf("head[%s]\n", head);
 						}
 					}
@@ -958,6 +969,152 @@ array_overflow:
 	return CSVTMT_ERROR;
 failed_to_append_lines:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to append csv lines");
+	return CSVTMT_ERROR;
+}
+
+CsvTomatoResult
+csvtmt_select(CsvTomatoModel *model, CsvTomatoError *error) {
+	// SELECTではmmapを使って走査する。
+	const char *not_found = NULL;
+	CsvTomatoCsvLine row = {0};
+	bool has_where = model->where_key_values_len;
+
+	if (model->mmap.fd == 0) {
+		header_read_from_table(&model->header, model->table_path, error);
+		if (error->error) {
+			goto failed_to_header_read;
+		}
+
+		// INSERT INTO table (id, name) VALUES (1, "Alice")
+		// だった場合はヘッダにid, nameが有るか調べる。
+		// そのインデックスの位置にVALUESをセットする。
+		not_found = header_has_column_types(
+			&model->header,
+			model->column_names,
+			model->column_names_len,
+			error
+		);
+		if (not_found) {
+			goto invalid_column;
+		}
+
+		{ // Linux
+			errno = 0;
+			model->mmap.fd = open(model->table_path, O_RDWR);
+			if (model->mmap.fd == -1) {
+				goto failed_to_open_table;
+			}
+
+			struct stat st;
+			errno = 0;
+			if (fstat(model->mmap.fd, &st) == -1) {
+				close(model->mmap.fd);
+				model->mmap.fd = 0;
+				goto failed_to_stat;
+			}
+
+			model->mmap.size = st.st_size;
+
+			model->mmap.ptr = mmap(
+				NULL, 
+				model->mmap.size, 
+				PROT_READ | PROT_WRITE, 
+				MAP_SHARED, 
+				model->mmap.fd, 
+				0
+			);
+			if (model->mmap.ptr == MAP_FAILED) {
+				goto failed_to_mmap;
+			}
+
+			model->mmap.cur = model->mmap.ptr;
+		}
+
+		// skip first line (header)
+		model->mmap.cur = (char *) csvtmt_csvline_parse_string(&row, model->mmap.cur, error);
+		if (error->error) {
+			goto failed_to_parse_csv;
+		}
+		csvtmt_csvline_destroy(&row);
+	}
+
+	// fdが0じゃない場合は（すでにファイルを開いている場合は）
+	// 途中から続行する。
+
+	if (has_where) {
+		ColumnInfoArray where_infos = {0};
+		store_colinfo(model, &where_infos, model->where_key_values, model->where_key_values_len, error);
+		if (error->error) {
+			goto failed_to_store_colinfo;
+		}
+
+		for (; *model->mmap.cur; ) {
+			model->mmap.cur = (char *) csvtmt_csvline_parse_string(&row, model->mmap.cur, error);
+			if (error->error) {
+				goto failed_to_parse_csv;
+			}
+			if (!strcmp(row.columns[0], "1")) {
+				csvtmt_csvline_destroy(&row);
+				continue; // this line deleted
+			}
+
+			ColumnInfo *winfo = where_match(&where_infos, &row);
+			if (winfo) {
+				model->row = row;
+				memset(&row, 0, sizeof(row));
+				goto ret_row;
+			}
+
+			csvtmt_csvline_destroy(&row);
+		}
+	} else {
+		for (; *model->mmap.cur; ) {
+			model->mmap.cur = (char *) csvtmt_csvline_parse_string(&row, model->mmap.cur, error);
+			if (error->error) {
+				goto failed_to_parse_csv;
+			}
+			if (!strcmp(row.columns[0], "1")) {
+				csvtmt_csvline_destroy(&row);
+				continue; // this line deleted
+			}
+
+			model->row = row;
+			goto ret_row;
+		}
+	}
+
+	// ここに到達したらファイルを閉じる。
+	{
+		munmap(model->mmap.ptr, model->mmap.size);
+		close(model->mmap.fd);
+		model->mmap.ptr = NULL;
+		model->mmap.fd = 0;
+	}
+
+	return CSVTMT_DONE;	
+ret_row:
+	// ここに到達したらファイルを開いたまま処理を継続する。
+	return CSVTMT_ROW;
+failed_to_store_colinfo:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to store column info");
+	return CSVTMT_ERROR;
+failed_to_header_read:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to read header");
+	return CSVTMT_ERROR;
+failed_to_parse_csv:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to parse csv line");
+	return CSVTMT_ERROR;
+failed_to_mmap:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to mmap. %s", strerror(errno));
+	return CSVTMT_ERROR;
+failed_to_stat:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to get table size: %s", strerror(errno));
+	return CSVTMT_ERROR;
+invalid_column:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid column name. \"%s\" is not in header types", not_found);
+	return CSVTMT_ERROR;
+failed_to_open_table:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to open table %s. %s", model->table_path, strerror(errno));
 	return CSVTMT_ERROR;
 }
 

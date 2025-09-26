@@ -44,6 +44,7 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 		// puts("CSVTMT_ND_STMT");
 		csvtmt_node_del_all(self->obj.sql_stmt.create_table_stmt);
 		csvtmt_node_del_all(self->obj.sql_stmt.insert_stmt);
+		csvtmt_node_del_all(self->obj.sql_stmt.select_stmt);
 		csvtmt_node_del_all(self->obj.sql_stmt.update_stmt);
 		csvtmt_node_del_all(self->obj.sql_stmt.delete_stmt);
 		break;

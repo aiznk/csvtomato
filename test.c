@@ -7,6 +7,85 @@
 	csvtmt_file_remove("test_db/id/" table_name "__id.txt");\
 }\
 
+#undef define_vars
+#define define_vars()\
+	CsvTomatoError error = {0};\
+	CsvTomatoTokenizer *t;\
+	CsvTomatoParser *p;\
+	CsvTomatoExecutor *e;\
+	CsvTomatoOpcode *o;\
+	CsvTomatoToken *token;\
+	CsvTomatoNode *node;\
+	CsvTomatoModel model = {0};\
+
+#undef die
+#define die() {\
+	if (error.error) {\
+		csvtmt_error_show(&error);\
+		exit(1);\
+	}\
+}\
+
+#undef setup
+#define setup() {\
+	csvtmt_error_clear(&error);\
+	csvtmt_model_init(&model, "test_db", &error);\
+	t = csvtmt_tokenizer_new(&error);\
+	p = csvtmt_parser_new(&error);\
+	o = csvtmt_opcode_new(&error);\
+	e = csvtmt_executor_new(&error);\
+}\
+
+#undef cleanup
+#define cleanup() {\
+	csvtmt_token_del_all(token);\
+	token = NULL;\
+	csvtmt_node_del_all(node);\
+	node = NULL;\
+	csvtmt_parser_del(p);\
+	p = NULL;\
+	csvtmt_tokenizer_del(t);\
+	t = NULL;\
+	csvtmt_opcode_del(o);\
+	o = NULL;\
+	csvtmt_executor_del(e);\
+	e = NULL;\
+}\
+
+#undef exec
+#define exec(query, hope) {\
+	setup();\
+	token = csvtmt_tokenizer_tokenize(t, query, &error);\
+	die();\
+	node = csvtmt_parser_parse(p, token, &error);\
+	die();\
+	csvtmt_opcode_parse(o, node, &error);\
+	die();\
+	csvtmt_executor_exec(e, &model, o->elems, o->len, &error);\
+	die();\
+	char *content = csvtmt_file_read(model.table_path);\
+	if (strcmp(content, hope)) {\
+		printf("content[%s]\n", content);\
+		assert(!strcmp(content, hope));\
+	}\
+	free(content);\
+	cleanup();\
+}\
+
+#undef exec_fail
+#define exec_fail(query, errmsg) {\
+	setup();\
+	token = csvtmt_tokenizer_tokenize(t, query, &error);\
+	die();\
+	node = csvtmt_parser_parse(p, token, &error);\
+	die();\
+	csvtmt_opcode_parse(o, node, &error);\
+	die();\
+	csvtmt_executor_exec(e, &model, o->elems, o->len, &error);\
+	assert(strstr(error.message, errmsg));\
+	cleanup();\
+}\
+
 // ヘルパー：文字列を FILE* に流し込む
 FILE *
 make_stream(const char *s) {
@@ -229,6 +308,13 @@ test_tomato(void) {
 	);
 	assert(!error.error);
 
+	csvtmt_exec(
+		db,
+		"INSERT INTO users (name, age) VALUES (\"Taro\", 30);",
+		&error
+	);
+	assert(!error.error);
+
 	csvtmt_prepare(
 		db,
 		"INSERT INTO users (name, age) VALUES (?, ?);",
@@ -239,104 +325,106 @@ test_tomato(void) {
 
 	csvtmt_bind_text(stmt, 1, "Bob", -1, CSVTMT_TRANSTENT, &error);
 	assert(!error.error);
-	csvtmt_bind_int(stmt, 2, 30, &error);
+	csvtmt_bind_int(stmt, 2, 20, &error);
 	assert(!error.error);
 
 	// 実行
-	csvtmt_step(stmt, &error);
+	assert(csvtmt_step(stmt, &error) == CSVTMT_DONE);
 	assert(!error.error);
 
 	csvtmt_finalize(stmt);
-	csvtmt_close(db);
 
 	assert_file(
 		"test_db/users.csv",
 		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
 		"0,1,Alice,20\n"
-		"0,2,Bob,30\n"
+		"0,2,Taro,30\n"
+		"0,3,Bob,20\n"
 		);
+
+	// SELECT 
+	assert(csvtmt_prepare(
+		db,
+		"SELECT id, age FROM users WHERE age = 20;",
+		&stmt,
+		&error
+	) == CSVTMT_OK);
+
+	assert(csvtmt_step(stmt, &error) == CSVTMT_ROW);
+	assert(stmt->model.row.len);
+	assert(!strcmp(stmt->model.row.columns[0], "0"));
+	assert(!strcmp(stmt->model.row.columns[1], "1"));
+	assert(!strcmp(stmt->model.row.columns[2], "Alice"));
+	assert(!strcmp(stmt->model.row.columns[3], "20"));
+	assert(csvtmt_column_int(stmt, 0, &error) == 1);
+	assert(!strcmp(csvtmt_column_text(stmt, 1, &error), "Alice"));
+	assert(csvtmt_column_double(stmt, 2, &error) == 20.0);
+
+	assert(csvtmt_step(stmt, &error) == CSVTMT_ROW);
+	assert(stmt->model.row.len);
+	assert(!strcmp(stmt->model.row.columns[0], "0"));
+	assert(!strcmp(stmt->model.row.columns[1], "3"));
+	assert(!strcmp(stmt->model.row.columns[2], "Bob"));
+	assert(!strcmp(stmt->model.row.columns[3], "20"));
+	assert(csvtmt_column_int(stmt, 0, &error) == 3);
+	assert(!strcmp(csvtmt_column_text(stmt, 1, &error), "Bob"));
+	assert(csvtmt_column_double(stmt, 2, &error) == 20.0);
+	
+	assert(csvtmt_step(stmt, &error) == CSVTMT_DONE);
+
+	csvtmt_finalize(stmt);
+
+	// SELECT all 
+	
+	assert(csvtmt_prepare(
+		db,
+		"SELECT id, age FROM users;",
+		&stmt,
+		&error
+	) == CSVTMT_OK);
+
+	assert(csvtmt_step(stmt, &error) == CSVTMT_ROW);
+	assert(stmt->model.row.len);
+	assert(!strcmp(stmt->model.row.columns[0], "0"));
+	assert(!strcmp(stmt->model.row.columns[1], "1"));
+	assert(!strcmp(stmt->model.row.columns[2], "Alice"));
+	assert(!strcmp(stmt->model.row.columns[3], "20"));
+	assert(csvtmt_column_int(stmt, 0, &error) == 1);
+	assert(!strcmp(csvtmt_column_text(stmt, 1, &error), "Alice"));
+	assert(csvtmt_column_double(stmt, 2, &error) == 20.0);
+
+	assert(csvtmt_step(stmt, &error) == CSVTMT_ROW);
+	assert(stmt->model.row.len);
+	assert(!strcmp(stmt->model.row.columns[0], "0"));
+	assert(!strcmp(stmt->model.row.columns[1], "2"));
+	assert(!strcmp(stmt->model.row.columns[2], "Taro"));
+	assert(!strcmp(stmt->model.row.columns[3], "30"));
+	assert(csvtmt_column_int(stmt, 0, &error) == 2);
+	assert(!strcmp(csvtmt_column_text(stmt, 1, &error), "Taro"));
+	assert(csvtmt_column_double(stmt, 2, &error) == 30.0);
+
+	assert(csvtmt_step(stmt, &error) == CSVTMT_ROW);
+	assert(stmt->model.row.len);
+	assert(!strcmp(stmt->model.row.columns[0], "0"));
+	assert(!strcmp(stmt->model.row.columns[1], "3"));
+	assert(!strcmp(stmt->model.row.columns[2], "Bob"));
+	assert(!strcmp(stmt->model.row.columns[3], "20"));
+	assert(csvtmt_column_int(stmt, 0, &error) == 3);
+	assert(!strcmp(csvtmt_column_text(stmt, 1, &error), "Bob"));
+	assert(csvtmt_column_double(stmt, 2, &error) == 20.0);
+
+	assert(csvtmt_step(stmt, &error) == CSVTMT_DONE);
+
+	csvtmt_finalize(stmt);
+
+
+	// done
+	csvtmt_close(db);
 }
 
 void
-test_executor(void) {
-	CsvTomatoError error = {0};
-	CsvTomatoTokenizer *t;
-	CsvTomatoParser *p;
-	CsvTomatoExecutor *e;
-	CsvTomatoOpcode *o;
-	CsvTomatoToken *token;
-	CsvTomatoNode *node;
-	CsvTomatoModel model = {0};
-
-	#undef die
-	#define die() {\
-		if (error.error) {\
-			csvtmt_error_show(&error);\
-			exit(1);\
-		}\
-	}\
-
-	#undef setup
-	#define setup() {\
-		csvtmt_error_clear(&error);\
-		csvtmt_model_init(&model, "test_db", &error);\
-		t = csvtmt_tokenizer_new(&error);\
-		p = csvtmt_parser_new(&error);\
-		o = csvtmt_opcode_new(&error);\
-		e = csvtmt_executor_new(&error);\
-	}\
-
-	#undef cleanup
-	#define cleanup() {\
-		csvtmt_token_del_all(token);\
-		token = NULL;\
-		csvtmt_node_del_all(node);\
-		node = NULL;\
-		csvtmt_parser_del(p);\
-		p = NULL;\
-		csvtmt_tokenizer_del(t);\
-		t = NULL;\
-		csvtmt_opcode_del(o);\
-		o = NULL;\
-		csvtmt_executor_del(e);\
-		e = NULL;\
-	}\
-
-	#undef exec
-	#define exec(query, hope) {\
-		setup();\
-		token = csvtmt_tokenizer_tokenize(t, query, &error);\
-		die();\
-		node = csvtmt_parser_parse(p, token, &error);\
-		die();\
-		csvtmt_opcode_parse(o, node, &error);\
-		die();\
-		csvtmt_executor_exec(e, &model, o->elems, o->len, &error);\
-		die();\
-		FILE *fp = fopen(model.table_path, "r");\
-		char buf[1024];\
-		size_t n = fread(buf, sizeof(buf[0]), 1024-1, fp);\
-		buf[n] = 0;\
-		if (strcmp(buf, hope)) {\
-			printf("buf[%s]\n", buf);\
-			assert(!strcmp(buf, hope));\
-		}\
-		fclose(fp);\
-		cleanup();\
-	}\
-
-	#undef exec_fail
-	#define exec_fail(query, errmsg) {\
-		setup();\
-		token = csvtmt_tokenizer_tokenize(t, query, &error);\
-		die();\
-		node = csvtmt_parser_parse(p, token, &error);\
-		die();\
-		csvtmt_opcode_parse(o, node, &error);\
-		die();\
-		csvtmt_executor_exec(e, &model, o->elems, o->len, &error);\
-		cleanup();\
-	}\
+test_executor_common(void) {
+	define_vars();
 
 	if (!csvtmt_file_exists("test_db")) {
 		csvtmt_file_mkdir("test_db");
@@ -433,6 +521,6 @@ int
 main(void) {
 	test_tomato();	
 	test_csv();
-	test_executor();
+	test_executor_common();
 	return 0;
 }
