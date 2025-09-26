@@ -1,4 +1,4 @@
-# csvtomato
+# CSV Tomato
 
 CSVファイルをSQL文で操作できるSQLiteライクなCライブラリです。
 
