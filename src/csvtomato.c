@@ -81,7 +81,7 @@ csvtmt_stmt_prepare(
 		query,
 		error
 	);
-	if (error->error) {
+	if (!self->token || error->error) {
 		goto fail;		
 	}
 
@@ -90,7 +90,7 @@ csvtmt_stmt_prepare(
 		self->token,
 		error
 	);
-	if (error->error) {
+	if (!self->node || error->error) {
 		goto fail;		
 	}
 

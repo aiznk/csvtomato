@@ -222,6 +222,7 @@ csvtmt_parser_parse(
 	CsvTomatoError *error
 ) {
 	CsvTomatoToken **tok = &token;
+	CsvTomatoNode *node;
 
 	if (kind(tok) == CSVTMT_TK_ROOT) {
 		next(tok);
@@ -229,7 +230,14 @@ csvtmt_parser_parse(
 		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found root token");
 		return NULL;
 	}
-	return parse_sql_stmt_list(self, tok, error);
+	
+	node = parse_sql_stmt_list(self, tok, error);
+	if (!node || error->error) {
+		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "invalid syntax");
+		return NULL;
+	}
+
+	return node;
 }
 
 static CsvTomatoNode * 
@@ -242,7 +250,7 @@ parse_sql_stmt_list(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoErro
 	CsvTomatoNode *sql_stmt_list;
 
 	sql_stmt_list = parse_sql_stmt(self, token, error);
-	if (error->error) {
+	if (!sql_stmt_list || error->error) {
 		csvtmt_node_del_all(n1);
 		return NULL;
 	}
@@ -257,6 +265,9 @@ parse_sql_stmt_list(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoErro
 		CsvTomatoNode *sql_stmt = parse_sql_stmt(self, token, error);
 		if (error->error) {
 			goto fail;
+		}
+		if (!sql_stmt) {
+			break;
 		}
 		node_push(sql_stmt_list, sql_stmt);
 	}
