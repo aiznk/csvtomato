@@ -320,49 +320,45 @@ csvtmt_finalize(CsvTomatoStmt *stmt) {
 
 int
 csvtmt_column_int(CsvTomatoStmt *stmt, size_t index, CsvTomatoError *error) {
-	if (!stmt->model.row.len) {
+	if (!stmt->model.selected_columns_len) {
 		csvtmt_error_format(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "row columns length is 0");
 		return -1;
 	}
 
-	index += 1; // index 0 is reserved (__MODE__)
-	if (index >= stmt->model.row.len) {
+	if (index >= stmt->model.selected_columns_len) {
 		csvtmt_error_format(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "index out of range");
 		return -1;
 	}
 
-	return atoi(stmt->model.row.columns[index]);
+	return atoi(stmt->model.selected_columns[index]);
 }
 
 double
 csvtmt_column_double(CsvTomatoStmt *stmt, size_t index, CsvTomatoError *error) {
-	if (!stmt->model.row.len) {
+	if (!stmt->model.selected_columns_len) {
 		csvtmt_error_format(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "row columns length is 0");
 		return -1.0;
 	}
 
-	index += 1; // index 0 is reserved (__MODE__)
-	if (index >= stmt->model.row.len) {
+	if (index >= stmt->model.selected_columns_len) {
 		csvtmt_error_format(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "index out of range");
 		return -1.0;
 	}
 
-	return atof(stmt->model.row.columns[index]);
+	return atof(stmt->model.selected_columns[index]);
 }
 
 const char *
 csvtmt_column_text(CsvTomatoStmt *stmt, size_t index, CsvTomatoError *error) {
-	if (!stmt->model.row.len) {
+	if (!stmt->model.selected_columns_len) {
 		csvtmt_error_format(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "row columns length is 0");
 		return NULL;
 	}
 
-	index += 1; // index 0 is reserved (__MODE__)
-	if (index >= stmt->model.row.len) {
+	if (index >= stmt->model.selected_columns_len) {
 		csvtmt_error_format(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "index out of range");
 		return NULL;
 	}
 
-	return stmt->model.row.columns[index];
+	return stmt->model.selected_columns[index];
 }
-

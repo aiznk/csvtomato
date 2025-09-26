@@ -267,15 +267,18 @@ test_csv(void) {
     parse_string("x,y,z", exp27, 3);
 	}
 
-void
+bool
 assert_file(const char *path, const char *s) {
 	char *content = csvtmt_file_read(path);
 	assert(content);
 	if (strcmp(content, s)) {
 		printf("content[%s]\n", content);
+		free(content);
+		return false;
+	} else {
+		free(content);
+		return true;		
 	}
-	assert(!strcmp(content, s));
-	free(content);
 }
 
 void 
@@ -318,12 +321,12 @@ test_tomato(void) {
 		&error
 	);
 	assert(!error.error);
-	assert_file(
+	assert(assert_file(
 		"test_db/users.csv",
 		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
 		"0,1,\"\"\"hige,hoge\"\"\",20\n"
 		"0,2,\"hige,hoge\",20\n"
-	);
+	));
 	assert(csvtmt_prepare(
 		db,
 		"SELECT name FROM users;",
@@ -384,18 +387,18 @@ test_tomato(void) {
 
 	csvtmt_finalize(stmt);
 
-	assert_file(
+	assert(assert_file(
 		"test_db/users.csv",
 		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
 		"0,1,\"Alice\",20\n"
 		"0,2,\"Taro\",30\n"
 		"0,3,\"Bob\",20\n"
-		);
+	));
 
 	// SELECT 
 	assert(csvtmt_prepare(
 		db,
-		"SELECT id, age FROM users WHERE age = 20;",
+		"SELECT name, age FROM users WHERE age = 20;",
 		&stmt,
 		&error
 	) == CSVTMT_OK);
@@ -406,9 +409,8 @@ test_tomato(void) {
 	assert(!strcmp(stmt->model.row.columns[1], "1"));
 	assert(!strcmp(stmt->model.row.columns[2], "Alice"));
 	assert(!strcmp(stmt->model.row.columns[3], "20"));
-	assert(csvtmt_column_int(stmt, 0, &error) == 1);
-	assert(!strcmp(csvtmt_column_text(stmt, 1, &error), "Alice"));
-	assert(csvtmt_column_double(stmt, 2, &error) == 20.0);
+	assert(!strcmp(csvtmt_column_text(stmt, 0, &error), "Alice"));
+	assert(csvtmt_column_int(stmt, 1, &error) == 20);
 
 	assert(csvtmt_step(stmt, &error) == CSVTMT_ROW);
 	assert(stmt->model.row.len);
@@ -416,9 +418,8 @@ test_tomato(void) {
 	assert(!strcmp(stmt->model.row.columns[1], "3"));
 	assert(!strcmp(stmt->model.row.columns[2], "Bob"));
 	assert(!strcmp(stmt->model.row.columns[3], "20"));
-	assert(csvtmt_column_int(stmt, 0, &error) == 3);
-	assert(!strcmp(csvtmt_column_text(stmt, 1, &error), "Bob"));
-	assert(csvtmt_column_double(stmt, 2, &error) == 20.0);
+	assert(!strcmp(csvtmt_column_text(stmt, 0, &error), "Bob"));
+	assert(csvtmt_column_int(stmt, 1, &error) == 20);
 
 	assert(csvtmt_step(stmt, &error) == CSVTMT_DONE);
 
@@ -440,8 +441,7 @@ test_tomato(void) {
 	assert(!strcmp(stmt->model.row.columns[2], "Alice"));
 	assert(!strcmp(stmt->model.row.columns[3], "20"));
 	assert(csvtmt_column_int(stmt, 0, &error) == 1);
-	assert(!strcmp(csvtmt_column_text(stmt, 1, &error), "Alice"));
-	assert(csvtmt_column_double(stmt, 2, &error) == 20.0);
+	assert(csvtmt_column_double(stmt, 1, &error) == 20.0);
 
 	assert(csvtmt_step(stmt, &error) == CSVTMT_ROW);
 	assert(stmt->model.row.len);
@@ -450,8 +450,7 @@ test_tomato(void) {
 	assert(!strcmp(stmt->model.row.columns[2], "Taro"));
 	assert(!strcmp(stmt->model.row.columns[3], "30"));
 	assert(csvtmt_column_int(stmt, 0, &error) == 2);
-	assert(!strcmp(csvtmt_column_text(stmt, 1, &error), "Taro"));
-	assert(csvtmt_column_double(stmt, 2, &error) == 30.0);
+	assert(csvtmt_column_double(stmt, 1, &error) == 30.0);
 
 	assert(csvtmt_step(stmt, &error) == CSVTMT_ROW);
 	assert(stmt->model.row.len);
@@ -460,8 +459,7 @@ test_tomato(void) {
 	assert(!strcmp(stmt->model.row.columns[2], "Bob"));
 	assert(!strcmp(stmt->model.row.columns[3], "20"));
 	assert(csvtmt_column_int(stmt, 0, &error) == 3);
-	assert(!strcmp(csvtmt_column_text(stmt, 1, &error), "Bob"));
-	assert(csvtmt_column_double(stmt, 2, &error) == 20.0);
+	assert(csvtmt_column_double(stmt, 1, &error) == 20.0);
 
 	assert(csvtmt_step(stmt, &error) == CSVTMT_DONE);
 
