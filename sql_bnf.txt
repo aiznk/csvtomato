@@ -36,7 +36,11 @@ delete_stmt ::=
 	DELETE FROM table_name [ WHERE expr ]
 
 column_name ::=
-	column_name
+	column_name |
+	star
+
+star ::=
+	'*'
 
 values ::= 
 	'(' expr ( ',' expr ) * ')'

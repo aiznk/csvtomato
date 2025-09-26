@@ -872,20 +872,24 @@ fail:
 
 static CsvTomatoNode *
 parse_column_name(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error) {
-	if (kind(token) != CSVTMT_TK_IDENT) {
-		return NULL;
-	}
-
 	CsvTomatoNode *n1 = csvtmt_node_new(CSVTMT_ND_COLUMN_NAME, error);
 	if (error->error) {
 		return NULL;
 	}
 
-	n1->obj.column_name.column_name = csvtmt_strdup(text(token), error);
-	if (error->error) {
+	if (kind(token) == CSVTMT_TK_IDENT) {
+		n1->obj.column_name.column_name = csvtmt_strdup(text(token), error);
+		if (error->error) {
+			goto fail;
+		}
+		next(token);
+	} else if (kind(token) == CSVTMT_TK_STAR) {
+		n1->obj.column_name.star = true;	
+		next(token);
+	} else {
 		goto fail;
 	}
-	next(token);
+
 
 	return n1;
 fail:

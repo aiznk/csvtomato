@@ -650,6 +650,7 @@ store_selected_columns(CsvTomatoModel *model, CsvTomatoCsvLine *row, CsvTomatoEr
 	const char **cols = model->column_names;
 	const char *col;
 	size_t clen = model->column_names_len;
+	bool star = model->column_names_is_star;
 	CsvTomatoColumnType *type;
 
 	if (tlen != row->len) {
@@ -657,19 +658,27 @@ store_selected_columns(CsvTomatoModel *model, CsvTomatoCsvLine *row, CsvTomatoEr
 		return;
 	}
 
-	model->selected_columns_len = clen;
+	if (star) {
+		model->selected_columns_len = row->len-1;
 
-	for (size_t ti = 0; ti < tlen; ti++) {
-		type = &types[ti];
-		for (size_t ci = 0; ci < clen; ci++) {
-			col = cols[ci];
-			if (!strcmp(type->type_name, col)) {
-				if (model->selected_columns_len >= csvtmt_numof(model->selected_columns)) {
-					csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "selected columns overflow");
-					return;
+		for (size_t i = 1; i < row->len; i++) {
+			model->selected_columns[i-1] = row->columns[i];
+		}
+	} else {
+		model->selected_columns_len = clen;
+
+		for (size_t ti = 0; ti < tlen; ti++) {
+			type = &types[ti];
+			for (size_t ci = 0; ci < clen; ci++) {
+				col = cols[ci];
+				if (!strcmp(type->type_name, col)) {
+					if (model->selected_columns_len >= csvtmt_numof(model->selected_columns)) {
+						csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "selected columns overflow");
+						return;
+					}
+					model->selected_columns[ci] = row->columns[ti];
+					break;
 				}
-				model->selected_columns[ci] = row->columns[ti];
-				break;
 			}
 		}
 	}

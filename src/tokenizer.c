@@ -256,6 +256,8 @@ csvtmt_tokenizer_tokenize(
 			store(CSVTMT_TK_END_PAREN);
 		} else if (c1 == '?') {
 			store(CSVTMT_TK_PLACE_HOLDER);
+		} else if (c1 == '*') {
+			store(CSVTMT_TK_STAR);
 		} else if (c1 == ',') {
 			store(CSVTMT_TK_COMMA);
 		} else if (c1 == '?') {

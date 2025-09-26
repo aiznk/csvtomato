@@ -81,6 +81,9 @@ csvtmt_executor_exec(
 			op_kind = op->kind;
 			goto invalid_op_kind;
 			break;
+		case CSVTMT_OP_STAR: {
+			stack_push_kind(CSVTMT_STACK_ELEM_STAR);
+		} break;
 		case CSVTMT_OP_PLACE_HOLDER: {
 			goto found_place_holder;
 		} break;
@@ -155,7 +158,16 @@ csvtmt_executor_exec(
 				}
 				switch (pop.kind) {
 				default: goto invalid_op_kind; break;
+				case CSVTMT_STACK_ELEM_STAR:
+					if (model->column_names_is_star) {
+						goto multiple_star_error;
+					}
+					model->column_names_is_star = true;
+					break;
 				case CSVTMT_STACK_ELEM_STRING_VALUE:
+					if (model->column_names_is_star) {
+						goto inavlid_column_names_with_star;
+					}
 					check_array(cols);
 					cols[cols_len++] = pop.obj.string_value.value;
 					break;
@@ -409,6 +421,14 @@ csvtmt_executor_exec(
 ret_row:
 	cleanup();
 	return CSVTMT_ROW;
+inavlid_column_names_with_star:
+	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "invalid column names. found star");
+	cleanup();
+	return CSVTMT_ERROR;
+multiple_star_error:
+	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "found multiple star");
+	cleanup();
+	return CSVTMT_ERROR;
 failed_to_open_table:
 	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to open table %s: %s", model->table_path, strerror(errno));
 	cleanup();
