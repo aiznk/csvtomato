@@ -546,6 +546,9 @@ csvtmt_error_msg(const CsvTomatoError *self);
 // utils.c
 
 char *
+csvtmt_wrap_column(const char *col, CsvTomatoError *error);
+
+char *
 csvtmt_strdup(const char *s, CsvTomatoError *error);
 
 void
@@ -785,11 +788,12 @@ void
 csvtmt_csvline_append_to_stream(
 	CsvTomatoCsvLine *self,
 	FILE *fp,
+	bool wrap,
 	CsvTomatoError *error
 );
 
 void
-csvtmt_csvline_destroy(CsvTomatoCsvLine *self);
+csvtmt_csvline_final(CsvTomatoCsvLine *self);
 
 // models.c
 
@@ -797,7 +801,7 @@ void
 csvtmt_model_init(CsvTomatoModel *self, const char *db_dir, CsvTomatoError *error);
 
 void
-csvtmt_model_destroy(CsvTomatoModel *self);
+csvtmt_model_final(CsvTomatoModel *self);
 
 CsvTomatoResult
 csvtmt_select(CsvTomatoModel *model, CsvTomatoError *error);

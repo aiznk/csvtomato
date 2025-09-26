@@ -25,8 +25,12 @@ store_colinfo(
 	CsvTomatoError *error
 );
 
-static void
-value_to_string(CsvTomatoValue *self, char *buf, size_t buf_size, const char **str);
+static char *
+value_to_column(
+	const CsvTomatoValue *self,
+	bool wrap,
+	CsvTomatoError *error
+);
 
 #define impl_static_array(NAMESPACE, STRUCT, TYPE)\
 	void\
@@ -52,8 +56,8 @@ csvtmt_model_init(
 }
 
 void
-csvtmt_model_destroy(CsvTomatoModel *self) {
-	csvtmt_csvline_destroy(&self->row);
+csvtmt_model_final(CsvTomatoModel *self) {
+	csvtmt_csvline_final(&self->row);
 	if (self->mmap.fd) {
 		munmap(self->mmap.ptr, self->mmap.size);
 		close(self->mmap.fd);
@@ -62,7 +66,7 @@ csvtmt_model_destroy(CsvTomatoModel *self) {
 	}
 }
 
-void
+static void
 type_parse_type_def(CsvTomatoColumnType *self, const char *type_def, CsvTomatoError *error) {
 	if (strstr(type_def, "INTEGER")) {
 		self->type_def_info.integer =  true;
@@ -85,7 +89,7 @@ type_parse_type_def(CsvTomatoColumnType *self, const char *type_def, CsvTomatoEr
 // id INTEGER PRIMARY KEY AUTOINCREMENT
 // name TEXT NOT NULL
 // とかがCSVヘッダカラム。idやnameをtype_nameに、それ以降をtype_defに格納。
-void
+static void
 type_parse_column(
 	CsvTomatoColumnType *self,
 	const char *col,
@@ -180,7 +184,7 @@ header_read_from_table(CsvTomatoHeader *self, const char *table_path, CsvTomatoE
 		// printf("type: index[%ld] type_name[%s] type_def[%s]\n", type->index, type->type_name, type->type_def);
 	}
 
-	csvtmt_csvline_destroy(&row);
+	csvtmt_csvline_final(&row);
 	return;
 types_overflow:
 	csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "header types overflow");
@@ -325,21 +329,35 @@ fail_gen_id:
 	return;
 }
 
-static void
-value_to_string(CsvTomatoValue *self, char *buf, size_t buf_size, const char **str) {
+static char *
+value_to_column(
+	const CsvTomatoValue *self,
+	bool wrap,
+	CsvTomatoError *error
+) {
+	char buf[CSVTMT_STR_SIZE];
+
 	switch (self->kind) {
 	case CSVTMT_VAL_PLACE_HOLDER:
 	case CSVTMT_VAL_NONE: break;
 	case CSVTMT_VAL_INT:
-		snprintf(buf, buf_size, "%ld", self->int_value);
+		snprintf(buf, sizeof buf, "%ld", self->int_value);
+		return csvtmt_strdup(buf, error);
 		break;
 	case CSVTMT_VAL_FLOAT:
-		snprintf(buf, buf_size, "%f", self->float_value);
+		snprintf(buf, sizeof buf, "%f", self->float_value);
+		return csvtmt_strdup(buf, error);
 		break;
 	case CSVTMT_VAL_STRING:
-		*str = self->string_value;
+		if (wrap) {
+			return csvtmt_wrap_column(self->string_value, error);
+		} else {
+			return csvtmt_strdup(self->string_value, error);
+		}
 		break;
 	}
+
+	return NULL;
 }
 
 static CsvTomatoValue
@@ -435,8 +453,13 @@ value_eq(const CsvTomatoValue *lhs, const CsvTomatoValue *rhs) {
 	return false;
 }
 
-void
-append_csv_lines(CsvTomatoModel *model, CsvLineArray *lines, CsvTomatoError *error) {
+static void
+append_csv_lines(
+	CsvTomatoModel *model,
+	CsvLineArray *lines,
+	bool wrap,
+	CsvTomatoError *error
+) {
 	errno = 0;
 	FILE *fp = fopen(model->table_path, "a");
 	if (!fp) {
@@ -445,7 +468,7 @@ append_csv_lines(CsvTomatoModel *model, CsvLineArray *lines, CsvTomatoError *err
 
 	for (size_t i = 0; i < lines->len; i++) {
 		CsvTomatoCsvLine *line = &lines->array[i];
-		csvtmt_csvline_append_to_stream(line, fp, error);
+		csvtmt_csvline_append_to_stream(line, fp, wrap, error);
 		if (error->error) {
 			goto failed_to_append;
 		}	
@@ -471,7 +494,7 @@ mkdir_tmp_dir(const char *db_dir, char *tmp_dir, size_t tmp_dir_size) {
 }
 
 static int
-replace_update(CsvTomatoModel *model, CsvTomatoError *error) {
+update_all(CsvTomatoModel *model, CsvTomatoError *error) {
 	FILE *fin, *fout;
 	ColumnInfoArray infos = {0};
 
@@ -501,7 +524,7 @@ replace_update(CsvTomatoModel *model, CsvTomatoError *error) {
 	size_t nline = 0;
 
 	for (;; nline++) {
-		csvtmt_csvline_destroy(&row);
+		csvtmt_csvline_final(&row);
 		int ret = csvtmt_csvline_parse_stream(&row, fin, error);
 		if (error->error) {
 			goto failed_to_parse_stream;
@@ -521,10 +544,12 @@ replace_update(CsvTomatoModel *model, CsvTomatoError *error) {
 
 				for (size_t ci = 0; ci < row.len; ci++) {
 					if (info->index == ci) {
-						const char *str = NULL;
-						char buf[CSVTMT_STR_SIZE];
-						value_to_string(&info->value, buf, sizeof buf, &str);
-						csvtmt_csvline_set_clone(&row, info->index, buf, error);
+						char *s = value_to_column(&info->value, false, error);
+						if (error->error) {
+							goto failed_to_value_to_string;
+						}
+						csvtmt_csvline_set_clone(&row, info->index, s, error);
+						free(s);
 						if (error->error) {
 							goto failed_to_replace;
 						}		
@@ -533,12 +558,12 @@ replace_update(CsvTomatoModel *model, CsvTomatoError *error) {
 			}
 		}
 
-		csvtmt_csvline_append_to_stream(&row, fout, error);
+		csvtmt_csvline_append_to_stream(&row, fout, true, error);
 		if (error->error) {
 			goto failed_to_append_to_stream;
 		}
 
-		csvtmt_csvline_destroy(&row);
+		csvtmt_csvline_final(&row);
 	}
 
 	if (csvtmt_file_rename(tmp_path, model->table_path) == -1) {
@@ -549,8 +574,11 @@ replace_update(CsvTomatoModel *model, CsvTomatoError *error) {
 	fclose(fout);
 	return CSVTMT_OK;
 
+failed_to_value_to_string:
+	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to value to string");
+	return CSVTMT_ERROR;
 failed_to_rename_csv_file:
-	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to rename csv file: %s", strerror(errno));
+	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to rename csv file");
 	return CSVTMT_ERROR;
 failed_to_open_table:
 	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to open table: %s: %s", model->table_path, strerror(errno));
@@ -624,12 +652,12 @@ replace_row(
 ) {
 	for (size_t i = 0; i < infos->len; i++) {
 		ColumnInfo *info = &infos->array[i];
-		char buf[1024];
-		const char *str = NULL;
-		value_to_string(&info->value, buf, sizeof buf, &str);
-		const char *p = str ? str : buf;
-		// printf("replace value[%s]\n", p);
-		csvtmt_csvline_set_clone(row, info->index, p, error);
+		char *s = value_to_column(&info->value, true, error);
+		if (error->error) {
+			return;
+		}
+		csvtmt_csvline_set_clone(row, info->index, s, error);
+		free(s);
 	}
 }
 
@@ -704,7 +732,7 @@ csvtmt_delete(CsvTomatoModel *model, CsvTomatoError *error) {
 		if (error->error) {
 			goto failed_to_parse_csv;
 		}
-		csvtmt_csvline_destroy(&row);
+		csvtmt_csvline_final(&row);
 
 		// CSVファイルを走査して、indicesの列の値がkvsのvalueと
 		// 一致しているか見る。一致していればWHEREにマッチしている行と見なす。
@@ -716,7 +744,7 @@ csvtmt_delete(CsvTomatoModel *model, CsvTomatoError *error) {
 				goto failed_to_parse_csv;
 			}
 			if (!strcmp(row.columns[0], "1")) {
-				csvtmt_csvline_destroy(&row);
+				csvtmt_csvline_final(&row);
 				continue; // this line deleted
 			}
 
@@ -730,7 +758,7 @@ csvtmt_delete(CsvTomatoModel *model, CsvTomatoError *error) {
 				*head = '1';
 			}
 
-			csvtmt_csvline_destroy(&row);
+			csvtmt_csvline_final(&row);
 		}
 
 
@@ -743,7 +771,7 @@ csvtmt_delete(CsvTomatoModel *model, CsvTomatoError *error) {
 		if (error->error) {
 			goto failed_to_parse_csv;
 		}
-		csvtmt_csvline_destroy(&row);
+		csvtmt_csvline_final(&row);
 
 		// CSVファイルを走査して、indicesの列の値がkvsのvalueと
 		// 一致しているか見る。一致していればWHEREにマッチしている行と見なす。
@@ -755,7 +783,7 @@ csvtmt_delete(CsvTomatoModel *model, CsvTomatoError *error) {
 				goto failed_to_parse_csv;
 			}
 			if (!strcmp(row.columns[0], "1")) {
-				csvtmt_csvline_destroy(&row);
+				csvtmt_csvline_final(&row);
 				continue; // this line deleted
 			}
 			if (*head == '"') {
@@ -764,7 +792,7 @@ csvtmt_delete(CsvTomatoModel *model, CsvTomatoError *error) {
 			// __MODE__ column to 1 (delete)
 			*head = '1';
 
-			csvtmt_csvline_destroy(&row);
+			csvtmt_csvline_final(&row);
 		}
 	}
 
@@ -871,7 +899,7 @@ csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error) {
 		if (error->error) {
 			goto failed_to_parse_csv;
 		}
-		csvtmt_csvline_destroy(&row);
+		csvtmt_csvline_final(&row);
 
 		// CSVファイルを走査して、indicesの列の値がkvsのvalueと
 		// 一致しているか見る。一致していればWHEREにマッチしている行と見なす。
@@ -883,7 +911,7 @@ csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error) {
 				goto failed_to_parse_csv;
 			}
 			if (!strcmp(row.columns[0], "1")) {
-				csvtmt_csvline_destroy(&row);
+				csvtmt_csvline_final(&row);
 				continue; // this line deleted
 			}
 
@@ -917,16 +945,16 @@ csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error) {
 				}
 			}
 
-			csvtmt_csvline_destroy(&row);
+			csvtmt_csvline_final(&row);
 		}
 
-		append_csv_lines(model, &lines, error);
+		append_csv_lines(model, &lines, false, error);
 		if (error->error) {
 			goto failed_to_append_lines;
 		}
 
 		for (size_t i = 0; i < lines.len; i++) {
-			csvtmt_csvline_destroy(&lines.array[i]);
+			csvtmt_csvline_final(&lines.array[i]);
 		}
 
 		{ // Linux
@@ -936,7 +964,7 @@ csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error) {
 	} else {
 		// UPDATE table SET age = 123, name = "Taro"
 		// WHERE句がない。全置換。
-		replace_update(model, error);
+		update_all(model, error);
 		if (error->error) {
 			goto failed_to_replace_update;
 		}
@@ -1035,7 +1063,7 @@ csvtmt_select(CsvTomatoModel *model, CsvTomatoError *error) {
 		if (error->error) {
 			goto failed_to_parse_csv;
 		}
-		csvtmt_csvline_destroy(&row);
+		csvtmt_csvline_final(&row);
 	}
 
 	// fdが0じゃない場合は（すでにファイルを開いている場合は）
@@ -1054,7 +1082,7 @@ csvtmt_select(CsvTomatoModel *model, CsvTomatoError *error) {
 				goto failed_to_parse_csv;
 			}
 			if (!strcmp(row.columns[0], "1")) {
-				csvtmt_csvline_destroy(&row);
+				csvtmt_csvline_final(&row);
 				continue; // this line deleted
 			}
 
@@ -1065,7 +1093,7 @@ csvtmt_select(CsvTomatoModel *model, CsvTomatoError *error) {
 				goto ret_row;
 			}
 
-			csvtmt_csvline_destroy(&row);
+			csvtmt_csvline_final(&row);
 		}
 	} else {
 		for (; *model->mmap.cur; ) {
@@ -1074,7 +1102,7 @@ csvtmt_select(CsvTomatoModel *model, CsvTomatoError *error) {
 				goto failed_to_parse_csv;
 			}
 			if (!strcmp(row.columns[0], "1")) {
-				csvtmt_csvline_destroy(&row);
+				csvtmt_csvline_final(&row);
 				continue; // this line deleted
 			}
 
@@ -1225,11 +1253,16 @@ csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error) {
 					snprintf(sbuf, sizeof sbuf, "%f", value->float_value);
 					csvtmt_str_append(buf, sbuf);
 					break;
-				case CSVTMT_VAL_STRING:
+				case CSVTMT_VAL_STRING: {
 					// TODO: wrap by double-quote
 					assert(value->string_value);
-					csvtmt_str_append(buf, value->string_value);
-					break;
+					char *s = csvtmt_wrap_column(value->string_value, error);
+					if (!s || error->error) {
+						goto failed_to_wrap_column;
+					}
+					csvtmt_str_append(buf, s);
+					free(s);
+				} break;
 				}
 			}
 
@@ -1243,6 +1276,10 @@ csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error) {
 	cleanup();
 	return CSVTMT_OK;
 
+failed_to_wrap_column:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to wrap column");
+	cleanup();
+	return CSVTMT_ERROR;
 failed_to_allocate_buffer:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to allocate buffer");
 	cleanup();
