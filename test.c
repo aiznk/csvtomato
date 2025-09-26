@@ -369,7 +369,7 @@ test_tomato(void) {
 	assert(csvtmt_column_int(stmt, 0, &error) == 3);
 	assert(!strcmp(csvtmt_column_text(stmt, 1, &error), "Bob"));
 	assert(csvtmt_column_double(stmt, 2, &error) == 20.0);
-	
+
 	assert(csvtmt_step(stmt, &error) == CSVTMT_DONE);
 
 	csvtmt_finalize(stmt);
@@ -416,7 +416,6 @@ test_tomato(void) {
 	assert(csvtmt_step(stmt, &error) == CSVTMT_DONE);
 
 	csvtmt_finalize(stmt);
-
 
 	// done
 	csvtmt_close(db);
