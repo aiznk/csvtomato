@@ -657,7 +657,7 @@ store_selected_columns(CsvTomatoModel *model, CsvTomatoCsvLine *row, CsvTomatoEr
 		return;
 	}
 
-	model->selected_columns_len = 0;
+	model->selected_columns_len = clen;
 
 	for (size_t ti = 0; ti < tlen; ti++) {
 		type = &types[ti];
@@ -668,7 +668,8 @@ store_selected_columns(CsvTomatoModel *model, CsvTomatoCsvLine *row, CsvTomatoEr
 					csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "selected columns overflow");
 					return;
 				}
-				model->selected_columns[model->selected_columns_len++] = row->columns[ti];
+				model->selected_columns[ci] = row->columns[ti];
+				break;
 			}
 		}
 	}
@@ -1242,7 +1243,6 @@ csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error) {
 		CsvTomatoValues *values = &model->values[i];
 
 		if (values->len != model->column_names_len) {
-			printf("%ld %ld %ld\n", model->values_len, values->len, model->column_names_len);
 			goto invalid_values_len;
 		}
 
@@ -1269,6 +1269,7 @@ csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error) {
 					break;
 				}
 			}
+
 			if (values_index == -1) {
 				// j は (id, name) などで指定されていないカラム。
 				// typesの情報を元にデフォルト値を入れる。
@@ -1298,7 +1299,6 @@ csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error) {
 					csvtmt_str_append(buf, sbuf);
 					break;
 				case CSVTMT_VAL_STRING: {
-					// TODO: wrap by double-quote
 					assert(value->string_value);
 					char *s = csvtmt_wrap_column(value->string_value, error);
 					if (!s || error->error) {

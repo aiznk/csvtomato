@@ -145,6 +145,9 @@ csvtmt_executor_exec(
 			stack_push_kind(CSVTMT_STACK_ELEM_COLUMN_NAMES_BEG);
 		} break;
 		case CSVTMT_OP_COLUMN_NAMES_END: {
+			const char *cols[CSVTMT_CSV_COLS_SIZE];
+			size_t cols_len = 0;
+
 			while (model->stack_len) {
 				stack_pop(pop);
 				if (pop.kind == CSVTMT_STACK_ELEM_COLUMN_NAMES_BEG) {
@@ -153,10 +156,16 @@ csvtmt_executor_exec(
 				switch (pop.kind) {
 				default: goto invalid_op_kind; break;
 				case CSVTMT_STACK_ELEM_STRING_VALUE:
-					check_array(model->column_names);
-					model->column_names[model->column_names_len++] = pop.obj.string_value.value;
+					check_array(cols);
+					cols[cols_len++] = pop.obj.string_value.value;
 					break;
 				}
+			}
+
+			// 逆順に格納されている配列を順列に直す。
+			for (ssize_t i = cols_len-1; i >= 0; i--) {
+				check_array(model->column_names);
+				model->column_names[model->column_names_len++] = cols[i];	
 			}
 			break;
 		} break;
@@ -167,19 +176,25 @@ csvtmt_executor_exec(
 			stack_push_kind(CSVTMT_STACK_ELEM_VALUES_BEG);
 		} break;
 		case CSVTMT_OP_VALUES_END: {
+			if (model->values_len >= csvtmt_numof(model->values)) {
+				goto array_overflow;
+			}
+
+			CsvTomatoValues *dst_values = &model->values[model->values_len];
+			CsvTomatoValue tmp_value_array[CSVTMT_VALUES_ARRAY_SIZE] = {0};
+			size_t tmp_value_array_len = 0;
+
 			while (model->stack_len) {
 				stack_pop(pop);
+
 				if (pop.kind == CSVTMT_STACK_ELEM_VALUES_BEG) {
 					break;
 				}
-				if (model->values_len >= csvtmt_numof(model->values)) {
+				if (tmp_value_array_len >= csvtmt_numof(tmp_value_array)) {
 					goto array_overflow;
 				}
-				CsvTomatoValues *values = &model->values[model->values_len];
-				if (values->len >= csvtmt_numof(values->values)) {
-					goto array_overflow;
-				}
-				CsvTomatoValue *value = &values->values[values->len];
+
+				CsvTomatoValue *value = &tmp_value_array[tmp_value_array_len++];
 
 				switch (pop.kind) {
 				default: goto invalid_op_kind; break;
@@ -197,8 +212,12 @@ csvtmt_executor_exec(
 					break;
 				}
 
-				values->len++;				
 				// printf("values->len %ld\n", values->len);
+			}
+
+			// 逆順に格納されている配列を順列に直す。
+			for (ssize_t i = tmp_value_array_len-1; i >= 0; i--) {
+				dst_values->values[dst_values->len++] = tmp_value_array[i];	
 			}
 
 			model->values_len++;

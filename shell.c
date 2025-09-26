@@ -11,7 +11,6 @@ int main(void) {
 		if (!fgets(cmd, sizeof cmd, stdin)) {
 			break;
 		}
-		cmd[strlen(cmd)-1] = 0;
 
 		csvtmt_quick_exec(db_dir, cmd);
 	}
