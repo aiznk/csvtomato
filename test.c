@@ -395,6 +395,33 @@ test_tomato(void) {
 		"0,3,\"Bob\",20\n"
 	));
 
+	// SELECT with star
+
+	assert(csvtmt_prepare(
+		db,
+		"SELECT * FROM users WHERE age = 20;",
+		&stmt,
+		&error
+	) == CSVTMT_OK);
+
+	assert(csvtmt_step(stmt, &error) == CSVTMT_ROW);
+	assert(stmt->model.row.len);
+	assert(!strcmp(stmt->model.row.columns[0], "0"));
+	assert(!strcmp(stmt->model.row.columns[1], "1"));
+	assert(!strcmp(stmt->model.row.columns[2], "Alice"));
+	assert(!strcmp(stmt->model.row.columns[3], "20"));
+	assert(!strcmp(stmt->model.selected_columns[0], "1"));
+	assert(!strcmp(stmt->model.selected_columns[1], "Alice"));
+	assert(!strcmp(stmt->model.selected_columns[2], "20"));
+
+	assert(csvtmt_step(stmt, &error) == CSVTMT_ROW);
+	assert(stmt->model.row.len);
+	assert(!strcmp(stmt->model.selected_columns[0], "3"));
+	assert(!strcmp(stmt->model.selected_columns[1], "Bob"));
+	assert(!strcmp(stmt->model.selected_columns[2], "20"));
+
+	csvtmt_finalize(stmt);
+
 	// SELECT 
 
 	assert(csvtmt_prepare(

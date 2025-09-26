@@ -77,6 +77,7 @@ typedef enum {
 	CSVTMT_TK_BEG_PAREN, // (
 	CSVTMT_TK_END_PAREN, // )
 	CSVTMT_TK_PLACE_HOLDER, // ?
+	CSVTMT_TK_STAR, // *
 	CSVTMT_TK_COMMA, // ,
 	CSVTMT_TK_INT,  // 123
 	CSVTMT_TK_DOUBLE,  // 3.14
@@ -126,6 +127,7 @@ typedef enum {
 
 typedef enum {
 	CSVTMT_OP_NONE,
+	CSVTMT_OP_STAR,
 	CSVTMT_OP_CREATE_TABLE_STMT_BEG,
 	CSVTMT_OP_CREATE_TABLE_STMT_END,
 	CSVTMT_OP_SELECT_STMT_BEG,
@@ -298,6 +300,7 @@ struct CsvTomatoNode {
 		} delete_stmt;
 		struct {
 			char *column_name;
+			bool star;
 		} column_name;
 		struct {
 			struct CsvTomatoNode *expr_list;
@@ -396,6 +399,7 @@ typedef enum {
 	CSVTMT_STACK_ELEM_INT_VALUE,
 	CSVTMT_STACK_ELEM_DOUBLE_VALUE,
 	CSVTMT_STACK_ELEM_IDENT,
+	CSVTMT_STACK_ELEM_STAR,
 	CSVTMT_STACK_ELEM_KEY_VALUE,
 	CSVTMT_STACK_ELEM_COLUMN_NAMES_BEG,
 	CSVTMT_STACK_ELEM_VALUES_BEG,
@@ -490,6 +494,7 @@ struct CsvTomatoModel {
 	bool do_create_table;
 	const char *column_names[CSVTMT_COLUMN_NAMES_ARRAY_SIZE];
 	size_t column_names_len;
+	bool column_names_is_star;
 	CsvTomatoValues values[CSVTMT_VALUES_ARRAY_SIZE];
 	size_t values_len;
 	CsvTomatoHeader header;

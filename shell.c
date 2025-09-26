@@ -8,6 +8,7 @@ int main(int argc, char *argv[]) {
 
 	if (!csvtmt_file_exists(db_dir)) {
 		fprintf(stderr, "can't open database. %s does not exists.\n", db_dir);
+		fprintf(stderr, "please create directory %s.\n", db_dir);
 		return 1;
 	}
 

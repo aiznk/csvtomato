@@ -25,6 +25,7 @@ static void
 destroy_elem(CsvTomatoOpcodeElem *elem) {
 	switch (elem->kind) {
 	case CSVTMT_OP_NONE: break;
+	case CSVTMT_OP_STAR: break;
 	case CSVTMT_OP_PLACE_HOLDER: break;
 	case CSVTMT_OP_ASSIGN: break;
 	case CSVTMT_OP_CREATE_TABLE_STMT_BEG:
@@ -575,21 +576,32 @@ opcode_column_name(
 	assert(node);
 	assert(node->kind == CSVTMT_ND_COLUMN_NAME);
 
-	CsvTomatoOpcodeElem elem = {0};
+	if (node->obj.column_name.star) {
+		CsvTomatoOpcodeElem elem = {0};
 
-	elem.kind = CSVTMT_OP_STRING_VALUE;
-	elem.obj.string_value.value = csvtmt_move(node->obj.column_name.column_name);
-	node->obj.column_name.column_name = NULL;
-
-	push(self, elem, error);
-	if (error->error) {
-		return;
-	}
-
-	if (node->next) {
-		opcode_column_name(self, node->next, error);
+		elem.kind = CSVTMT_OP_STAR;
+		push(self, elem, error);
 		if (error->error) {
 			return;
+		}
+
+	} else {
+		CsvTomatoOpcodeElem elem = {0};
+
+		elem.kind = CSVTMT_OP_STRING_VALUE;
+		elem.obj.string_value.value = csvtmt_move(node->obj.column_name.column_name);
+		node->obj.column_name.column_name = NULL;
+
+		push(self, elem, error);
+		if (error->error) {
+			return;
+		}
+
+		if (node->next) {
+			opcode_column_name(self, node->next, error);
+			if (error->error) {
+				return;
+			}
 		}
 	}
 }
