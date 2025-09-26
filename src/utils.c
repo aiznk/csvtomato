@@ -57,36 +57,24 @@ csvtmt_quick_exec(const char *db_dir, const char *query) {
 	}\
 
 	CsvTomatoError error = {0};
-	CsvTomatoTokenizer *t;
-	CsvTomatoParser *p;
-	CsvTomatoExecutor *e;
-	CsvTomatoOpcode *o;
-	CsvTomatoToken *token;
-	CsvTomatoNode *node;
-	CsvTomatoModel model = {0};
+	CsvTomato *db;
+	CsvTomatoStmt *stmt;
 
-	t = csvtmt_tokenizer_new(&error);
-	p = csvtmt_parser_new(&error);
-	o = csvtmt_opcode_new(&error);
-	e = csvtmt_executor_new(&error);
-
-	token = csvtmt_tokenizer_tokenize(t, query, &error);
+	db = csvtmt_open(db_dir, &error);
 	check_error();
 
-	node = csvtmt_parser_parse(p, token, &error);
+	csvtmt_prepare(db, query, &stmt, &error);
 	check_error();
 
-	csvtmt_opcode_parse(o, node, &error);
-	check_error();
+	while (csvtmt_step(stmt, &error) == CSVTMT_ROW) {
+		check_error();
+		for (size_t i = 0; i < stmt->model.row.len; i++) {
+			const char *col = stmt->model.row.columns[i];
+			printf("%s ", col);
+		}
+		printf("\n");
+	}
 
-	snprintf(model.db_dir, sizeof model.db_dir, "%s", db_dir);
-	csvtmt_executor_exec(e, &model, o->elems, o->len, &error);
-	check_error();
-
-	csvtmt_token_del_all(token);
-	csvtmt_node_del_all(node);
-	csvtmt_parser_del(p);
-	csvtmt_tokenizer_del(t);
-	csvtmt_opcode_del(o);
-	csvtmt_executor_del(e);
+	csvtmt_finalize(stmt);
+	csvtmt_close(db);
 }
