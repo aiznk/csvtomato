@@ -68,8 +68,8 @@ csvtmt_quick_exec(const char *db_dir, const char *query) {
 
 	while (csvtmt_step(stmt, &error) == CSVTMT_ROW) {
 		check_error();
-		for (size_t i = 0; i < stmt->model.row.len; i++) {
-			const char *col = stmt->model.row.columns[i];
+		for (size_t i = 0; i < stmt->model.selected_columns_len; i++) {
+			const char *col = stmt->model.selected_columns[i];
 			printf("%s ", col);
 		}
 		printf("\n");
