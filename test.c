@@ -324,6 +324,29 @@ test_tomato(void) {
 		"0,1,\"\"\"hige,hoge\"\"\",20\n"
 		"0,2,\"hige,hoge\",20\n"
 	);
+	assert(csvtmt_prepare(
+		db,
+		"SELECT name FROM users;",
+		&stmt,
+		&error
+	) == CSVTMT_OK);
+
+	assert(csvtmt_step(stmt, &error) == CSVTMT_ROW);
+	assert(stmt->model.row.len);
+	assert(!strcmp(stmt->model.row.columns[0], "0"));
+	assert(!strcmp(stmt->model.row.columns[1], "1"));
+	assert(!strcmp(stmt->model.row.columns[2], "\"hige,hoge\""));
+	assert(!strcmp(stmt->model.row.columns[3], "20"));
+
+	assert(csvtmt_step(stmt, &error) == CSVTMT_ROW);
+	assert(stmt->model.row.len);
+	assert(!strcmp(stmt->model.row.columns[0], "0"));
+	assert(!strcmp(stmt->model.row.columns[1], "2"));
+	assert(!strcmp(stmt->model.row.columns[2], "hige,hoge"));
+	assert(!strcmp(stmt->model.row.columns[3], "20"));
+
+	assert(csvtmt_step(stmt, &error) == CSVTMT_DONE);
+	csvtmt_finalize(stmt);
 
 	// section 2
 	clear_table();
