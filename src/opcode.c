@@ -76,6 +76,9 @@ destroy_elem(CsvTomatoOpcodeElem *elem) {
 
 void
 csvtmt_opcode_del(CsvTomatoOpcode *self) {
+	if (!self) {
+		return;
+	}
 	for (size_t i = 0; i < self->len; i++) {
 		CsvTomatoOpcodeElem *elem = &self->elems[i];
 		destroy_elem(elem);
