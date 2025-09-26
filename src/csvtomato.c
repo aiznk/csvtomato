@@ -120,6 +120,12 @@ csvtmt_open(
 		return NULL;
 	}
 
+	if (!csvtmt_file_exists(db_dir)) {
+		free(self);
+		csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "%s database does not exists", db_dir);
+		return NULL;
+	}
+
 	snprintf(self->db_dir, sizeof self->db_dir, "%s", db_dir);
 
 	return self;
