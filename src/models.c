@@ -344,8 +344,8 @@ value_to_column(
 		snprintf(buf, sizeof buf, "%ld", self->int_value);
 		return csvtmt_strdup(buf, error);
 		break;
-	case CSVTMT_VAL_FLOAT:
-		snprintf(buf, sizeof buf, "%f", self->float_value);
+	case CSVTMT_VAL_DOUBLE:
+		snprintf(buf, sizeof buf, "%f", self->double_value);
 		return csvtmt_strdup(buf, error);
 		break;
 	case CSVTMT_VAL_STRING:
@@ -404,9 +404,9 @@ string_to_value(const char *str) {
 		val.kind = CSVTMT_VAL_STRING;
 		val.string_value = str;
 		break;
-	case 30: // float
-		val.kind = CSVTMT_VAL_FLOAT;
-		val.float_value = atof(str);
+	case 30: // double
+		val.kind = CSVTMT_VAL_DOUBLE;
+		val.double_value = atof(str);
 		break;
 	}
 
@@ -424,19 +424,19 @@ value_eq(const CsvTomatoValue *lhs, const CsvTomatoValue *rhs) {
 		case CSVTMT_VAL_INT:
 			return lhs->int_value == rhs->int_value;
 			break;
-		case CSVTMT_VAL_FLOAT:
-			return lhs->int_value == rhs->float_value;
+		case CSVTMT_VAL_DOUBLE:
+			return lhs->int_value == rhs->double_value;
 			break;
 		}
 		break;
-	case CSVTMT_VAL_FLOAT:
+	case CSVTMT_VAL_DOUBLE:
 		switch (rhs->kind) {
 		default: return false; break;
 		case CSVTMT_VAL_INT:
-			return lhs->float_value == rhs->int_value;
+			return lhs->double_value == rhs->int_value;
 			break;
-		case CSVTMT_VAL_FLOAT:
-			return lhs->float_value == rhs->float_value;
+		case CSVTMT_VAL_DOUBLE:
+			return lhs->double_value == rhs->double_value;
 			break;
 		}
 		break;
@@ -1249,8 +1249,8 @@ csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error) {
 					snprintf(sbuf, sizeof sbuf, "%ld", value->int_value);
 					csvtmt_str_append(buf, sbuf);
 					break;
-				case CSVTMT_VAL_FLOAT:
-					snprintf(sbuf, sizeof sbuf, "%f", value->float_value);
+				case CSVTMT_VAL_DOUBLE:
+					snprintf(sbuf, sizeof sbuf, "%f", value->double_value);
 					csvtmt_str_append(buf, sbuf);
 					break;
 				case CSVTMT_VAL_STRING: {

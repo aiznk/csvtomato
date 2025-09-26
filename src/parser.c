@@ -1057,9 +1057,9 @@ parse_number(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *erro
 	if (kind(token) == CSVTMT_TK_INT) {
 		n1->obj.number.int_value = (*token)->int_value;
 		n1->obj.number.is_int = true;
-	} else if (kind(token) == CSVTMT_TK_FLOAT) {
-		n1->obj.number.float_value = (*token)->float_value;
-		n1->obj.number.is_float = true;
+	} else if (kind(token) == CSVTMT_TK_DOUBLE) {
+		n1->obj.number.double_value = (*token)->double_value;
+		n1->obj.number.is_double = true;
 	} else {
 		goto fail;
 	}

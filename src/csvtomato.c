@@ -267,7 +267,7 @@ csvtmt_bind_int(
 }
 
 void
-csvtmt_bind_float(
+csvtmt_bind_double(
 	CsvTomatoStmt *stmt,
 	size_t index, 
 	double value, 
@@ -281,8 +281,8 @@ csvtmt_bind_float(
 			elem->old_kind == CSVTMT_OP_PLACE_HOLDER) {
 			if (count == index) {
 				elem->old_kind = elem->kind;
-				elem->kind = CSVTMT_OP_FLOAT_VALUE;
-				elem->obj.float_value.value = value;
+				elem->kind = CSVTMT_OP_DOUBLE_VALUE;
+				elem->obj.double_value.value = value;
 				if (error->error) {
 					return;
 				}

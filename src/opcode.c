@@ -62,7 +62,7 @@ destroy_elem(CsvTomatoOpcodeElem *elem) {
 		}
 		break;
 	case CSVTMT_OP_INT_VALUE: break;
-	case CSVTMT_OP_FLOAT_VALUE: break;
+	case CSVTMT_OP_DOUBLE_VALUE: break;
 	case CSVTMT_OP_COLUMN_DEF:
 		free(elem->obj.column_def.column_name);
 		break;
@@ -665,9 +665,9 @@ opcode_number(
 		if (error->error) {
 			return;
 		}
-	} else if (node->obj.number.is_float) {
-		elem.kind = CSVTMT_OP_FLOAT_VALUE;
-		elem.obj.float_value.value = node->obj.number.float_value;
+	} else if (node->obj.number.is_double) {
+		elem.kind = CSVTMT_OP_DOUBLE_VALUE;
+		elem.obj.double_value.value = node->obj.number.double_value;
 		push(self, elem, error);
 		if (error->error) {
 			return;
