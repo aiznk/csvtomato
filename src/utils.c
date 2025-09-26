@@ -1,6 +1,37 @@
 #include <csvtomato.h>
 
 char *
+csvtmt_wrap_column(const char *col, CsvTomatoError *error) {
+	CsvTomatoString *s = csvtmt_str_new();
+	if (!s) {
+		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate string");
+		return NULL;
+	}
+
+	csvtmt_str_push_back(s, '"');
+
+	for (const char *p = col; *p; p++) {
+		if (*p == '"') {
+			csvtmt_str_push_back(s, *p);
+			csvtmt_str_push_back(s, *p);
+		} else if (*p == '\\') {
+			p++;
+			if (*p) {
+				csvtmt_str_push_back(s, *p);
+			} else {
+				break;
+			}
+		} else {
+			csvtmt_str_push_back(s, *p);
+		}
+	}
+
+	csvtmt_str_push_back(s, '"');
+
+	return csvtmt_str_esc_del(s);
+}
+
+char *
 csvtmt_strdup(const char *s, CsvTomatoError *error) {
 	size_t len = strlen(s);
 

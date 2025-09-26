@@ -281,7 +281,7 @@ fail:
 }
 
 void
-csvtmt_csvline_destroy(CsvTomatoCsvLine *self) {
+csvtmt_csvline_final(CsvTomatoCsvLine *self) {
 	for (size_t i = 0; i < self->len; i++) {
 		free(self->columns[i]);
 		self->columns[i] = NULL;
@@ -290,49 +290,19 @@ csvtmt_csvline_destroy(CsvTomatoCsvLine *self) {
 }
 
 static void
-wrap_column(char *buf, size_t size, const char *col) {
-	char *end = buf + size-2;
-	char *b = buf;
-	const char *p = col;
-
-	*b++ = '"';
-
-	for (; *p && b < end; p++, b++) {
-		if (*p == '"') {
-			*b++ = '"';
-			*b = '"';
-		} else {
-			*b = *p;
-		}
-	}
-
-	*b++ = '"';
-	*b = '\0';
-}
-
-static void
-append_column_to_stream(const char *col, FILE *fp, CsvTomatoError *error) {
-	size_t len = strlen(col);
-
-	if (len == 0) {
-		return;
-	}
-
-	const char *chars = "\"\n";
-	bool wrap = false;
-
-	for (const char *ch = chars; *ch; ch++) {
-		if (strchr(col, *ch)) {
-			wrap = true;
-			break;
-		}
-	}
-
+append_column_to_stream(
+	const char *col,
+	FILE *fp,
+	bool wrap,
+	CsvTomatoError *error
+) {
 	if (wrap) {
-		size_t size = len*2+1;
-		char buf[size];
-		wrap_column(buf, size, col);
-		fprintf(fp, "%s", buf);
+		char *s = csvtmt_wrap_column(col, error);
+		if (error->error) {
+			return;
+		}
+		fprintf(fp, "%s", s);
+		free(s);
 	} else {
 		fprintf(fp, "%s", col);
 	}
@@ -342,11 +312,12 @@ void
 csvtmt_csvline_append_to_stream(
 	CsvTomatoCsvLine *self,
 	FILE *fp,
+	bool wrap,
 	CsvTomatoError *error
 ) {
 	for (size_t i = 0; i < self->len-1; i++) {
 		const char *col = self->columns[i];
-		append_column_to_stream(col, fp, error);
+		append_column_to_stream(col, fp, wrap, error);
 		if (error->error) {
 			return;
 		}
@@ -354,7 +325,7 @@ csvtmt_csvline_append_to_stream(
 	}	
 	if (self->len) {
 		const char *col = self->columns[self->len-1];
-		append_column_to_stream(col, fp, error);
+		append_column_to_stream(col, fp, wrap, error);
 		if (error->error) {
 			return;
 		}

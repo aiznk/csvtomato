@@ -49,7 +49,7 @@ csvtmt_stmt_del(CsvTomatoStmt *self) {
 	csvtmt_tokenizer_del(self->tokenizer);
 	csvtmt_opcode_del(self->opcode);
 	csvtmt_executor_del(self->executor);
-	csvtmt_model_destroy(&self->model);
+	csvtmt_model_final(&self->model);
 	free(self);
 }
 
@@ -297,7 +297,7 @@ CsvTomatoResult
 csvtmt_step(CsvTomatoStmt *stmt, CsvTomatoError *error) {
 	CsvTomatoResult result;
 
-	csvtmt_csvline_destroy(&stmt->model.row);
+	csvtmt_csvline_final(&stmt->model.row);
 	memset(&stmt->model.row, 0, sizeof(stmt->model.row));
 
 	result = csvtmt_executor_exec(

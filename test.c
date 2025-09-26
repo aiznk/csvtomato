@@ -111,7 +111,7 @@ parse_stream(const char *input, const char *expected[], int expected_len) {
         assert(strcmp(line.columns[i], expected[i]) == 0);
     }
 
-	csvtmt_csvline_destroy(&line);
+	csvtmt_csvline_final(&line);
 }
 
 void parse_string(const char *input, const char *expected[], int expected_len) {
@@ -126,7 +126,7 @@ void parse_string(const char *input, const char *expected[], int expected_len) {
         assert(strcmp(line.columns[i], expected[i]) == 0);
     }
 
-	csvtmt_csvline_destroy(&line);		
+	csvtmt_csvline_final(&line);		
 }
 
 void
@@ -271,6 +271,9 @@ void
 assert_file(const char *path, const char *s) {
 	char *content = csvtmt_file_read(path);
 	assert(content);
+	if (strcmp(content, s)) {
+		printf("content[%s]\n", content);
+	}
 	assert(!strcmp(content, s));
 	free(content);
 }
@@ -281,6 +284,20 @@ test_tomato(void) {
 	CsvTomato *db;
 	CsvTomatoStmt *stmt;
 
+	#define clear_table() {\
+		clear("users");\
+		csvtmt_exec(\
+			db,\
+			"CREATE TABLE IF NOT EXISTS users ("\
+			"	id INTEGER PRIMARY KEY AUTOINCREMENT,"\
+			"	name TEXT NOT NULL,"\
+			"	age INTEGER"\
+			");",\
+			&error\
+		);\
+		assert(!error.error);\
+	}\
+
 	db = csvtmt_open("test_db", &error);
 	assert(db);
 	if (error.error) {
@@ -288,18 +305,28 @@ test_tomato(void) {
 		return;
 	}
 
-	clear("users");
-
+	// section 1
+	clear_table();
 	csvtmt_exec(
 		db,
-		"CREATE TABLE IF NOT EXISTS users ("
-		"	id INTEGER PRIMARY KEY AUTOINCREMENT,"
-		"	name TEXT NOT NULL,"
-		"	age INTEGER"
-		");",
+		"INSERT INTO users (name, age) VALUES (\"\\\"hige,hoge\\\"\", 20);",
+		&error
+	);
+	csvtmt_exec(
+		db,
+		"INSERT INTO users (name, age) VALUES (\"hige,hoge\", 20);",
 		&error
 	);
 	assert(!error.error);
+	assert_file(
+		"test_db/users.csv",
+		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
+		"0,1,\"\"\"hige,hoge\"\"\",20\n"
+		"0,2,\"hige,hoge\",20\n"
+	);
+
+	// section 2
+	clear_table();
 
 	csvtmt_exec(
 		db,
@@ -337,9 +364,9 @@ test_tomato(void) {
 	assert_file(
 		"test_db/users.csv",
 		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
-		"0,1,Alice,20\n"
-		"0,2,Taro,30\n"
-		"0,3,Bob,20\n"
+		"0,1,\"Alice\",20\n"
+		"0,2,\"Taro\",30\n"
+		"0,3,\"Bob\",20\n"
 		);
 
 	// SELECT 
@@ -449,69 +476,69 @@ test_executor_common(void) {
 	exec(
 		"INSERT INTO users (name, age) VALUES (\"Alice\", 223);",
 		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
-		"0,1,Alice,223\n"
+		"0,1,\"Alice\",223\n"
 	);
 	exec(
 		"INSERT INTO users (name, age) VALUES (\"Hanako\", 223), (\"Taro\", 223)",
 		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
-		"0,1,Alice,223\n"
-		"0,2,Hanako,223\n"
-		"0,3,Taro,223\n"
+		"0,1,\"Alice\",223\n"
+		"0,2,\"Hanako\",223\n"
+		"0,3,\"Taro\",223\n"
 	);
 	// UPDATEでWHEREを指定した場合はマッチした行を論理削除し、
 	// ファイル末尾にコピー＆編集した行を追記する。
 	exec(
 		"UPDATE users SET age = 200, name = \"Tamako\" WHERE id = 2;",
 		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
-		"0,1,Alice,223\n"
-		"1,2,Hanako,223\n"
-		"0,3,Taro,223\n"		
-		"0,2,Tamako,200\n"
+		"0,1,\"Alice\",223\n"
+		"1,2,\"Hanako\",223\n"
+		"0,3,\"Taro\",223\n"		
+		"0,2,\"Tamako\",200\n"
 	);
 	exec(
 		"UPDATE users SET age = 200, name = \"Tamako\" WHERE age = 223;",
 		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
-		"1,1,Alice,223\n"
-		"1,2,Hanako,223\n"
-		"1,3,Taro,223\n"		
-		"0,2,Tamako,200\n"
-		"0,1,Tamako,200\n"
-		"0,3,Tamako,200\n"		
+		"1,1,\"Alice\",223\n"
+		"1,2,\"Hanako\",223\n"
+		"1,3,\"Taro\",223\n"		
+		"0,2,\"Tamako\",200\n"
+		"0,1,\"Tamako\",200\n"
+		"0,3,\"Tamako\",200\n"		
 	);
 	// UPDATEの全置換では論理削除した行は自動的にドロップする。
 	exec(
 		"UPDATE users SET age = 123, id = 3",
-		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
-		"0,3,Tamako,123\n"
-		"0,3,Tamako,123\n"
-		"0,3,Tamako,123\n"		
+		"\"__MODE__\",\"id INTEGER PRIMARY KEY AUTOINCREMENT\",\"name TEXT NOT NULL\",\"age INTEGER\"\n"
+		"\"0\",\"3\",\"Tamako\",\"123\"\n"
+		"\"0\",\"3\",\"Tamako\",\"123\"\n"
+		"\"0\",\"3\",\"Tamako\",\"123\"\n"		
 	);
 	exec(
 		"INSERT INTO users (name, age) VALUES (\"Hanako\", 223), (\"Taro\", 223)",
-		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
-		"0,3,Tamako,123\n"
-		"0,3,Tamako,123\n"
-		"0,3,Tamako,123\n"		
-		"0,4,Hanako,223\n"
-		"0,5,Taro,223\n"
+		"\"__MODE__\",\"id INTEGER PRIMARY KEY AUTOINCREMENT\",\"name TEXT NOT NULL\",\"age INTEGER\"\n"
+		"\"0\",\"3\",\"Tamako\",\"123\"\n"
+		"\"0\",\"3\",\"Tamako\",\"123\"\n"
+		"\"0\",\"3\",\"Tamako\",\"123\"\n"		
+		"0,4,\"Hanako\",223\n"
+		"0,5,\"Taro\",223\n"
 	);
 	exec(
 		"DELETE FROM users WHERE age = 223",
-		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
-		"0,3,Tamako,123\n"
-		"0,3,Tamako,123\n"
-		"0,3,Tamako,123\n"		
-		"1,4,Hanako,223\n"
-		"1,5,Taro,223\n"
+		"\"__MODE__\",\"id INTEGER PRIMARY KEY AUTOINCREMENT\",\"name TEXT NOT NULL\",\"age INTEGER\"\n"
+		"\"0\",\"3\",\"Tamako\",\"123\"\n"
+		"\"0\",\"3\",\"Tamako\",\"123\"\n"
+		"\"0\",\"3\",\"Tamako\",\"123\"\n"		
+		"1,4,\"Hanako\",223\n"
+		"1,5,\"Taro\",223\n"
 	);
 	exec(
 		"DELETE FROM users",
-		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,age INTEGER\n"
-		"1,3,Tamako,123\n"
-		"1,3,Tamako,123\n"
-		"1,3,Tamako,123\n"		
-		"1,4,Hanako,223\n"
-		"1,5,Taro,223\n"
+		"\"__MODE__\",\"id INTEGER PRIMARY KEY AUTOINCREMENT\",\"name TEXT NOT NULL\",\"age INTEGER\"\n"
+		"\"1\",\"3\",\"Tamako\",\"123\"\n"
+		"\"1\",\"3\",\"Tamako\",\"123\"\n"
+		"\"1\",\"3\",\"Tamako\",\"123\"\n"		
+		"1,4,\"Hanako\",223\n"
+		"1,5,\"Taro\",223\n"
 	);
 }
 
