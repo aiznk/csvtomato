@@ -182,7 +182,7 @@ tokenize_number(
 			push(c1);
 		} else if (c1 == '.') {
 			push(c1);
-			tok->kind = CSVTMT_TK_FLOAT;
+			tok->kind = CSVTMT_TK_DOUBLE;
 		} else {
 			self->index--;
 			break;
@@ -192,7 +192,7 @@ tokenize_number(
 	if (tok->kind == CSVTMT_TK_INT) {
 		tok->int_value = atoi(tok->text);
 	} else {
-		tok->float_value = atof(tok->text);
+		tok->double_value = atof(tok->text);
 	}
 
 	return tok;

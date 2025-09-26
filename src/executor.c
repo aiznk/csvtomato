@@ -187,9 +187,9 @@ csvtmt_executor_exec(
 					value->kind = CSVTMT_VAL_INT;
 					value->int_value = pop.obj.int_value.value;
 					break;
-				case CSVTMT_STACK_ELEM_FLOAT_VALUE:
-					value->kind = CSVTMT_VAL_FLOAT;
-					value->float_value = pop.obj.float_value.value;
+				case CSVTMT_STACK_ELEM_DOUBLE_VALUE:
+					value->kind = CSVTMT_VAL_DOUBLE;
+					value->double_value = pop.obj.double_value.value;
 					break;
 				case CSVTMT_STACK_ELEM_STRING_VALUE:
 					value->kind = CSVTMT_VAL_STRING;
@@ -272,12 +272,12 @@ csvtmt_executor_exec(
 					elem.obj.key_value.value.int_value = rhs.obj.int_value.value;
 					stack_push(elem);
 				} break;
-				case CSVTMT_STACK_ELEM_FLOAT_VALUE: {
+				case CSVTMT_STACK_ELEM_DOUBLE_VALUE: {
 					CsvTomatoStackElem elem = {0};
 					elem.kind = CSVTMT_STACK_ELEM_KEY_VALUE,
 					elem.obj.key_value.key = lhs.obj.ident.value;
-					elem.obj.key_value.value.kind = CSVTMT_VAL_FLOAT;
-					elem.obj.key_value.value.float_value = rhs.obj.float_value.value;
+					elem.obj.key_value.value.kind = CSVTMT_VAL_DOUBLE;
+					elem.obj.key_value.value.double_value = rhs.obj.double_value.value;
 					stack_push(elem);
 				} break;
 				case CSVTMT_STACK_ELEM_STRING_VALUE: {
@@ -304,10 +304,10 @@ csvtmt_executor_exec(
 			elem.obj.int_value.value = op->obj.int_value.value;
 			stack_push(elem);
 		} break;
-		case CSVTMT_OP_FLOAT_VALUE: {
+		case CSVTMT_OP_DOUBLE_VALUE: {
 			CsvTomatoStackElem elem = {0};
-			elem.kind = CSVTMT_STACK_ELEM_FLOAT_VALUE;
-			elem.obj.float_value.value = op->obj.float_value.value;
+			elem.kind = CSVTMT_STACK_ELEM_DOUBLE_VALUE;
+			elem.obj.double_value.value = op->obj.double_value.value;
 			stack_push(elem);
 		} break;
 		case CSVTMT_OP_CREATE_TABLE_STMT_BEG: {

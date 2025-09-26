@@ -79,7 +79,7 @@ typedef enum {
 	CSVTMT_TK_PLACE_HOLDER, // ?
 	CSVTMT_TK_COMMA, // ,
 	CSVTMT_TK_INT,  // 123
-	CSVTMT_TK_FLOAT,  // 3.14
+	CSVTMT_TK_DOUBLE,  // 3.14
 	CSVTMT_TK_STRING,
 
 	// reserved idents
@@ -147,7 +147,7 @@ typedef enum {
 	CSVTMT_OP_VALUES_BEG,
 	CSVTMT_OP_VALUES_END,
 	CSVTMT_OP_INT_VALUE,
-	CSVTMT_OP_FLOAT_VALUE,
+	CSVTMT_OP_DOUBLE_VALUE,
 	CSVTMT_OP_STRING_VALUE,
 	CSVTMT_OP_COLUMN_DEF,
 	CSVTMT_OP_PLACE_HOLDER,
@@ -242,7 +242,7 @@ struct CsvTomatoToken {
 	char text[CSVTMT_STR_SIZE];
 	size_t len;
 	int64_t int_value;
-	double float_value;
+	double double_value;
 	struct CsvTomatoToken *next;
 };
 
@@ -314,9 +314,9 @@ struct CsvTomatoNode {
 		} assign_expr;
 		struct {
 			int64_t int_value;
-			double float_value;
+			double double_value;
 			bool is_int;
-			bool is_float;
+			bool is_double;
 		} number;
 		struct {
 			char *string;
@@ -378,7 +378,7 @@ struct CsvTomatoOpcodeElem {
 		} int_value;
 		struct {
 			double value;
-		} float_value;
+		} double_value;
 		struct {
 			char *column_name;
 			CsvTomatoTokenKind type_name;
@@ -394,7 +394,7 @@ struct CsvTomatoOpcodeElem {
 typedef enum {
 	CSVTMT_STACK_ELEM_STRING_VALUE,
 	CSVTMT_STACK_ELEM_INT_VALUE,
-	CSVTMT_STACK_ELEM_FLOAT_VALUE,
+	CSVTMT_STACK_ELEM_DOUBLE_VALUE,
 	CSVTMT_STACK_ELEM_IDENT,
 	CSVTMT_STACK_ELEM_KEY_VALUE,
 	CSVTMT_STACK_ELEM_COLUMN_NAMES_BEG,
@@ -406,7 +406,7 @@ typedef enum {
 typedef enum {
 	CSVTMT_VAL_NONE,
 	CSVTMT_VAL_INT,
-	CSVTMT_VAL_FLOAT,
+	CSVTMT_VAL_DOUBLE,
 	CSVTMT_VAL_STRING,
 	CSVTMT_VAL_PLACE_HOLDER,
 } CsvTomatoValueKind;
@@ -414,7 +414,7 @@ typedef enum {
 struct CsvTomatoValue {
 	CsvTomatoValueKind kind;
 	int64_t int_value;
-	double float_value;
+	double double_value;
 	const char *string_value;
 };
 
@@ -429,7 +429,7 @@ struct CsvTomatoStackElem {
 		} int_value;
 		struct {
 			double value;
-		} float_value;
+		} double_value;
 		struct {
 			const char *value;
 		} ident;
@@ -614,7 +614,7 @@ csvtmt_bind_int(
 );
 
 void
-csvtmt_bind_float(
+csvtmt_bind_double(
 	CsvTomatoStmt *stmt,
 	size_t index, 
 	double value, 
