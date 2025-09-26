@@ -33,7 +33,7 @@ CSVファイルはこのフォルダ以下に作成されます。
 ### クエリを実行する
 
 ```c
-	csvtmt_execute(
+	csvtmt_exec(
 		db,
 		"CREATE TABLE IF NOT EXISTS users ("
 		"	id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -42,7 +42,7 @@ CSVファイルはこのフォルダ以下に作成されます。
 		");",
 		&error
 	);
-	csvtmt_execute(
+	csvtmt_exec(
 		db,
 		"INSERT INTO users (name, age) VALUES (\"Alice\", 20);",
 		&error

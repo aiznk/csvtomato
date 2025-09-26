@@ -69,11 +69,12 @@ csvtmt_executor_exec(
 
 	CsvTomatoOpcodeKind op_kind;
 	CsvTomatoStackElem pop;
+	CsvTomatoResult result = CSVTMT_DONE;
 
 	model->stack_len = 0;
 
-	for (size_t i = model->opcodes_index; i < opcodes_len; i++) {
-		const CsvTomatoOpcodeElem *op = &opcodes[i];
+	for (; model->opcodes_index < opcodes_len; model->opcodes_index++) {
+		const CsvTomatoOpcodeElem *op = &opcodes[model->opcodes_index];
 
 		switch (op->kind) {
 		case CSVTMT_OP_NONE: 
@@ -108,7 +109,13 @@ csvtmt_executor_exec(
 			snprintf(model->table_path, sizeof model->table_path, "%s/%s.csv", model->db_dir, model->table_name);
 		} break;
 		case CSVTMT_OP_SELECT_STMT_END: {
-			// TODO
+			result = csvtmt_select(model, error);
+			if (error->error) {
+				goto select_error;
+			}
+			if (result == CSVTMT_ROW) {
+				goto ret_row;
+			}
 		} break;
 		case CSVTMT_OP_INSERT_STMT_BEG: {
 			model->table_name = op->obj.insert_stmt.table_name;
@@ -378,8 +385,11 @@ csvtmt_executor_exec(
 	}
 
 	cleanup();
-	return CSVTMT_DONE;
+	return result;
 
+ret_row:
+	cleanup();
+	return CSVTMT_ROW;
 failed_to_open_table:
 	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to open table %s: %s", model->table_path, strerror(errno));
 	cleanup();
@@ -412,6 +422,9 @@ invalid_stack_elem_kind:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid stack element kind");
 	cleanup();
 	return CSVTMT_ERROR;
+select_error:
+	cleanup();
+	return CSVTMT_ERROR;	
 update_error:
 	cleanup();
 	return CSVTMT_ERROR;	
