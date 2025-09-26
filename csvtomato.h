@@ -498,6 +498,8 @@ struct CsvTomatoModel {
 	CsvTomatoKeyValue where_key_values[CSVTMT_ASSIGNS_ARRAY_SIZE];
 	size_t where_key_values_len;
 	CsvTomatoCsvLine row;
+	const char *selected_columns[CSVTMT_COLUMN_NAMES_ARRAY_SIZE];
+	size_t selected_columns_len;
 	struct {
 		char *ptr;
 		char *cur;

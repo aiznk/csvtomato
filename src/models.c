@@ -644,6 +644,37 @@ array_overflow:
 }
 
 static void
+store_selected_columns(CsvTomatoModel *model, CsvTomatoCsvLine *row, CsvTomatoError *error) {
+	CsvTomatoColumnType *types = model->header.types;
+	size_t tlen = model->header.types_len;
+	const char **cols = model->column_names;
+	const char *col;
+	size_t clen = model->column_names_len;
+	CsvTomatoColumnType *type;
+
+	if (tlen != row->len) {
+		csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid row length");
+		return;
+	}
+
+	model->selected_columns_len = 0;
+
+	for (size_t ti = 0; ti < tlen; ti++) {
+		type = &types[ti];
+		for (size_t ci = 0; ci < clen; ci++) {
+			col = cols[ci];
+			if (!strcmp(type->type_name, col)) {
+				if (model->selected_columns_len >= csvtmt_numof(model->selected_columns)) {
+					csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "selected columns overflow");
+					return;
+				}
+				model->selected_columns[model->selected_columns_len++] = row->columns[ti];
+			}
+		}
+	}
+}
+
+static void
 replace_row(
 	CsvTomatoModel *model,
 	CsvTomatoCsvLine *row,
@@ -1046,7 +1077,7 @@ csvtmt_select(CsvTomatoModel *model, CsvTomatoError *error) {
 			model->mmap.ptr = mmap(
 				NULL, 
 				model->mmap.size, 
-				PROT_READ | PROT_WRITE, 
+				PROT_READ, 
 				MAP_SHARED, 
 				model->mmap.fd, 
 				0
@@ -1089,6 +1120,10 @@ csvtmt_select(CsvTomatoModel *model, CsvTomatoError *error) {
 			ColumnInfo *winfo = where_match(&where_infos, &row);
 			if (winfo) {
 				model->row = row;
+				store_selected_columns(model, &model->row, error);
+				if (error->error) {
+					goto failed_to_store_selected_columns;
+				}
 				memset(&row, 0, sizeof(row));
 				goto ret_row;
 			}
@@ -1107,6 +1142,12 @@ csvtmt_select(CsvTomatoModel *model, CsvTomatoError *error) {
 			}
 
 			model->row = row;
+
+			store_selected_columns(model, &model->row, error);
+			if (error->error) {
+				goto failed_to_store_selected_columns;
+			}
+
 			goto ret_row;
 		}
 	}
@@ -1123,6 +1164,9 @@ csvtmt_select(CsvTomatoModel *model, CsvTomatoError *error) {
 ret_row:
 	// ここに到達したらファイルを開いたまま処理を継続する。
 	return CSVTMT_ROW;
+failed_to_store_selected_columns:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to store selected columns");
+	return CSVTMT_ERROR;
 failed_to_store_colinfo:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to store column info");
 	return CSVTMT_ERROR;
