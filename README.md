@@ -33,6 +33,23 @@ test_db > SELECT * FROM users;
 
 ## ライブラリの使い方
 
+### ヘッダファイルのインクルード
+
+ライブラリを使うには`csvtomato.h`のインクルードが必要です。
+このヘッダファイルには構造体の定義などが書かれています。
+
+```c
+#include "csvtomato.h"
+
+int main(void) {
+	csvtmt_quick_exec("test_db", "SELECT * FROM users");
+	return 0;
+}
+```
+
+ライブラリはまだ開発中なので、構造体のメンバに直接アクセスするのはおすすめしません。
+なぜなら破壊的変更が行われる可能性があるからです。
+
 ### データベースを開く
 
 ```c
