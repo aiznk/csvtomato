@@ -84,7 +84,10 @@
 	csvtmt_opcode_parse(o, node, &error);\
 	die();\
 	csvtmt_executor_exec(e, &model, o->elems, o->len, &error);\
-	assert(strstr(error.message, errmsg));\
+	if (!strstr(csvtmt_error_msg(&error), errmsg)) {\
+		printf("errmsg[%s]\n", csvtmt_error_msg(&error));\
+	}\
+	assert(strstr(csvtmt_error_msg(&error), errmsg));\
 	cleanup();\
 }\
 

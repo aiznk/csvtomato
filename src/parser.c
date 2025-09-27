@@ -5,7 +5,7 @@ csvtmt_node_new(CsvTomatoNodeKind kind, CsvTomatoError *error) {
 	errno = 0;
 	CsvTomatoNode *self = calloc(1, sizeof(*self));
 	if (!self) {
-		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
+		csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
 		return NULL;
 	}
 
@@ -138,7 +138,7 @@ csvtmt_parser_new(CsvTomatoError *error) {
 	errno = 0;
 	CsvTomatoParser *self = calloc(1, sizeof(*self));
 	if (!self) {
-		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
+		csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
 		return NULL;
 	}
 
@@ -227,13 +227,13 @@ csvtmt_parser_parse(
 	if (kind(tok) == CSVTMT_TK_ROOT) {
 		next(tok);
 	} else {
-		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found root token");
+		csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found root token");
 		return NULL;
 	}
 	
 	node = parse_sql_stmt_list(self, tok, error);
 	if (!node || error->error) {
-		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "invalid syntax");
+		csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "invalid syntax");
 		return NULL;
 	}
 
@@ -363,18 +363,18 @@ parse_create_table_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomato
 				next(token);
 				n1->obj.create_table_stmt.if_not_exists = true;
 			} else {
-				csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found EXISTS after IF NOT on CREATE TABLE");
+				csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found EXISTS after IF NOT on CREATE TABLE");
 				goto fail;
 			}
 		} else {
-			csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found NOT after IF on CREATE TABLE");
+			csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found NOT after IF on CREATE TABLE");
 			goto fail;
 		}
 	}
 
 	// table_name
 	if (kind(token) != CSVTMT_TK_IDENT) {
-		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found table_name on CREATE TABLE");
+		csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found table_name on CREATE TABLE");
 		goto fail;
 	}
 
@@ -388,7 +388,7 @@ parse_create_table_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomato
 	if (kind(token) == CSVTMT_TK_BEG_PAREN) {
 		next(token);
 	} else {
-		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found ( on CREATE TABLE");
+		csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found ( on CREATE TABLE");
 		goto fail;
 	}
 
@@ -399,7 +399,7 @@ parse_create_table_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomato
 		goto fail;
 	}
 	if (!column_def_list) {
-		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found first column def on CREATE TABLE");
+		csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found first column def on CREATE TABLE");
 		goto fail;
 	}
 
@@ -415,7 +415,7 @@ parse_create_table_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomato
 			goto fail;
 		}
 		if (!clmn) {
-			csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found column_def after comma on CREATE TABLE");
+			csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found column_def after comma on CREATE TABLE");
 			goto fail;
 		}
 
@@ -458,7 +458,7 @@ parse_column_def(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *
 	next(token);
 
 	if (!is_valid_type_name(kind(token))) {
-		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "invalid type name: %d: %s", kind(token), text(token));
+		csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "invalid type name: %d: %s", kind(token), text(token));
 		goto fail;
 	}
 	n1->obj.column_def.type_name = kind(token);
@@ -505,7 +505,7 @@ parse_column_constraint(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomato
 				goto ok;
 			}
 		} else {
-			csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found KEY after PRIMARY on column_constraint");
+			csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found KEY after PRIMARY on column_constraint");
 			goto fail;
 		}
 	} else if (kind(token) == CSVTMT_TK_NOT) {
@@ -516,7 +516,7 @@ parse_column_constraint(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomato
 			n1->obj.column_constraint.null = true;
 			goto ok;
 		} else {
-			csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found NULL after NOT on column_constraint");
+			csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found NULL after NOT on column_constraint");
 			goto fail;
 		}
 	} else {
@@ -573,19 +573,19 @@ parse_delete_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError 
 
 	return n1;
 failed_to_parse_expr:
-	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "failed to parse WHERE expression on DELETE");
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "failed to parse WHERE expression on DELETE");
 	csvtmt_node_del_all(n1);
 	return NULL;
 failed_to_strdup:
-	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "failed to strdup");
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "failed to strdup");
 	csvtmt_node_del_all(n1);
 	return NULL;
 not_found_table_name:
-	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found table name on DELETE");
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found table name on DELETE");
 	csvtmt_node_del_all(n1);
 	return NULL;
 not_found_from:
-	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found FROM on DELETE");
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found FROM on DELETE");
 	csvtmt_node_del_all(n1);
 	return NULL;
 ret_null:
@@ -669,23 +669,23 @@ ret_null:
 	csvtmt_node_del_all(n1);
 	return NULL;
 not_found_set:
-	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found SET on update statement");
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found SET on update statement");
 	csvtmt_node_del_all(n1);
 	return NULL;	
 not_found_table_name:
-	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found table name on update statement");
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found table name on update statement");
 	csvtmt_node_del_all(n1);
 	return NULL;	
 fail_parse_assign_expr:
-	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "failed to parse assign expression on update statement");
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "failed to parse assign expression on update statement");
 	csvtmt_node_del_all(n1);
 	return NULL;	
 fail_parse_where_expr:
-	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "failed to parse WHERE expression on update statement");
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "failed to parse WHERE expression on update statement");
 	csvtmt_node_del_all(n1);
 	return NULL;	
 fail_allocate:
-	csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
+	csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
 	csvtmt_node_del_all(n1);
 	return NULL;	
 }
@@ -752,22 +752,22 @@ parse_select_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError 
 	return n1;
 
 failed_to_parse_expr:
-	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "failed to parse WHERE expression on select statement");
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "failed to parse WHERE expression on select statement");
 	return NULL;
 failed_to_strdup:
-	csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to strdup on select statement");
+	csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to strdup on select statement");
 	return NULL;
 not_found_from:
-	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found FROM on select statement");
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found FROM on select statement");
 	return NULL;
 failed_to_allocate_node:
-	csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate node on select statement");
+	csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to allocate node on select statement");
 	return NULL;
 failed_to_parse_column_name:
-	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "failed to parse column name on select statement");
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "failed to parse column name on select statement");
 	return NULL;
 not_found_table_name:
-	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found table name on select statement");
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found table name on select statement");
 	return NULL;
 }
 
@@ -779,13 +779,13 @@ parse_insert_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError 
 	next(token);
 
 	if (kind(token) != CSVTMT_TK_INTO) {
-		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found INTO after INSERT on insert statement");
+		csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found INTO after INSERT on insert statement");
 		return NULL;
 	}
 	next(token);
 
 	if (kind(token) != CSVTMT_TK_IDENT) {
-		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found table name after INSERT INTO on insert statement");
+		csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found table name after INSERT INTO on insert statement");
 		return NULL;
 	}
 
@@ -809,7 +809,7 @@ parse_insert_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError 
 			goto fail;
 		}
 		if (!column_name_list) {
-			csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found column name after table name on insert statement");
+			csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found column name after table name on insert statement");
 			goto fail;
 		}
 
@@ -824,7 +824,7 @@ parse_insert_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError 
 				goto fail;
 			}
 			if (!column_name) {
-				csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found column name after comma on insert statement");
+				csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found column name after comma on insert statement");
 				goto fail;
 			}
 
@@ -832,7 +832,7 @@ parse_insert_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError 
 		}
 
 		if (kind(token) != CSVTMT_TK_END_PAREN) {
-			csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found ) after column name on insert statement");
+			csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found ) after column name on insert statement");
 			goto fail;
 		}
 		next(token);
@@ -849,7 +849,7 @@ parse_insert_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError 
 			goto fail;
 		}
 		if (!values_list) {
-			csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found values on insert statement");
+			csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found values on insert statement");
 			goto fail;
 		}
 
@@ -865,7 +865,7 @@ parse_insert_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError 
 				goto fail;
 			}
 			if (!values) {
-				csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found values after comma on insert statement");
+				csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found values after comma on insert statement");
 				goto fail;
 			}
 
@@ -925,7 +925,7 @@ parse_values(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *erro
 		goto fail;
 	}
 	if (!expr_list) {
-		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found expression on VALUES");
+		csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found expression on VALUES");
 		goto fail;
 	}
 
@@ -941,7 +941,7 @@ parse_values(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *erro
 			goto fail;
 		}
 		if (!expr) {
-			csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found expression after comma on VALUES");
+			csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found expression after comma on VALUES");
 			goto fail;
 		}
 
@@ -949,7 +949,7 @@ parse_values(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *erro
 	}
 
 	if (kind(token) != CSVTMT_TK_END_PAREN) {
-		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found ) on VALUES");
+		csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found ) on VALUES");
 		return NULL;
 	}
 	next(token);
@@ -1002,15 +1002,15 @@ ret_null:
 	csvtmt_node_del_all(n1);
 	return NULL;
 not_found_assign:
-	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "not found assign in assign expr");
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found assign in assign expr");
 	csvtmt_node_del_all(n1);
 	return NULL;
 fail_parse_expr:
-	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "failed to parse expr in assign expr");
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "failed to parse expr in assign expr");
 	csvtmt_node_del_all(n1);
 	return NULL;
 fail_allocate:
-	csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
+	csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
 	csvtmt_node_del_all(n1);
 	return NULL;
 }

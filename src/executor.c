@@ -5,7 +5,7 @@ csvtmt_executor_new(CsvTomatoError *error) {
 	errno = 0;
 	CsvTomatoExecutor *self = calloc(1, sizeof(*self));
 	if (!self) {
-		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
+		csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
 		return NULL;
 	}
 
@@ -40,7 +40,7 @@ skip_to(
 			return i;
 		}
 	}
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "not found opcode kind on skip");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "not found opcode kind on skip");
 	return 0;
 }
 
@@ -896,110 +896,110 @@ ret_row:
 	cleanup();
 	return CSVTMT_ROW;
 not_found_keys:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "not found keys");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "not found keys");
 	cleanup();
 	return CSVTMT_ERROR;
 failed_to_store_selected_columns:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to store selected columns");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to store selected columns");
 	cleanup();
 	return CSVTMT_ERROR;
 failed_to_push_row:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to push row");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to push row");
 	cleanup();
 	return CSVTMT_ERROR;
 failed_to_replace_row:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to replace row");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to replace row");
 	cleanup();
 	return CSVTMT_ERROR;
 failed_to_update_all:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to update all");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to update all");
 	cleanup();
 	return CSVTMT_ERROR;
 failed_to_store_col_infos:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to store column infos");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to store column infos");
 	cleanup();
 	return CSVTMT_ERROR;
 failed_to_allocate_rows:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to allocate rows");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to allocate rows");
 	cleanup();
 	return CSVTMT_ERROR;
 failed_to_append_rows:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to append rows");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to append rows");
 	cleanup();
 	return CSVTMT_ERROR;
 invalid_mode:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid mode");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "invalid mode");
 	cleanup();
 	return CSVTMT_ERROR;
 not_found_type_name:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "not found type name");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "not found type name");
 	cleanup();
 	return CSVTMT_ERROR;
 failed_to_parse_row:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to parse row");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to parse row");
 	cleanup();
 	return CSVTMT_ERROR;
 failed_to_read_header:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to read header");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to read header");
 	cleanup();
 	return CSVTMT_ERROR;
 failed_to_open_mmap:
-	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to open mmap");
+	csvtmt_error_push(error, CSVTMT_ERR_FILE_IO, "failed to open mmap");
 	cleanup();
 	return CSVTMT_ERROR;
 inavlid_column_names_with_star:
-	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "invalid column names. found star");
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "invalid column names. found star");
 	cleanup();
 	return CSVTMT_ERROR;
 multiple_star_error:
-	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "found multiple star");
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "found multiple star");
 	cleanup();
 	return CSVTMT_ERROR;
 failed_to_open_table:
-	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to open table %s: %s", model->table_path, strerror(errno));
+	csvtmt_error_push(error, CSVTMT_ERR_FILE_IO, "failed to open table %s: %s", model->table_path, strerror(errno));
 	cleanup();
 	return CSVTMT_ERROR;
 failed_to_allocate_buffer:
-	csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate buffer: %s", strerror(errno));
+	csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to allocate buffer: %s", strerror(errno));
 	cleanup();
 	return CSVTMT_ERROR;
 found_place_holder:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "found place holder");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "found place holder");
 	cleanup();
 	return CSVTMT_ERROR;
 table_already_exists:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "table %s already exists", model->table_name);
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "table %s already exists", model->table_name);
 	cleanup();
 	return CSVTMT_ERROR;
 invalid_type_name:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid type name");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "invalid type name");
 	cleanup();
 	return CSVTMT_ERROR;
 stack_overflow:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "stack overflow");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "stack overflow");
 	cleanup();
 	return CSVTMT_ERROR;
 stack_underflow:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "stack underflow");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "stack underflow");
 	cleanup();
 	return CSVTMT_ERROR;
 invalid_stack_elem_kind:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid stack element kind");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "invalid stack element kind");
 	cleanup();
 	return CSVTMT_ERROR;
 insert_error:
 	cleanup();
 	return CSVTMT_ERROR;	
 array_overflow:
-	csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "array overflow");
+	csvtmt_error_push(error, CSVTMT_ERR_BUF_OVERFLOW, "array overflow");
 	cleanup();
 	return CSVTMT_ERROR;
 invalid_elem_kind:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid stack element kind");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "invalid stack element kind");
 	cleanup();
 	return CSVTMT_ERROR;
 invalid_op_kind:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid op kind");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "invalid op kind");
 	cleanup();
 	return CSVTMT_ERROR;
 }

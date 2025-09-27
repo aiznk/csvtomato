@@ -5,7 +5,7 @@ csvtmt_strlist_new(CsvTomatoError *error) {
 	errno = 0;
 	CsvTomatoStringList *self = calloc(1, sizeof(*self));
 	if (!self) {
-		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
+		csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
 		return NULL;
 	}
 

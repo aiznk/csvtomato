@@ -8,7 +8,7 @@ csvtmt_token_new(
 	errno = 0;
 	CsvTomatoToken *self = calloc(1, sizeof(*self));
 	if (!self) {
-		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
+		csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
 		return NULL;		
 	}
 
@@ -44,7 +44,7 @@ csvtmt_tokenizer_new(CsvTomatoError *error) {
 	errno = 0;
 	CsvTomatoTokenizer *self = calloc(1, sizeof(CsvTomatoTokenizer));
 	if (!self) {
-		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
+		csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
 		return NULL;
 	}
 
@@ -70,7 +70,7 @@ tokenize_ident(CsvTomatoTokenizer *self, CsvTomatoError *error) {
 	#undef push
 	#define push(c) {\
 		if (tok->len >= CSVTMT_STR_SIZE) {\
-			csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "token buffer overflow (1)");\
+			csvtmt_error_push(error, CSVTMT_ERR_BUF_OVERFLOW, "token buffer overflow (1)");\
 			return NULL;\
 		}\
 		tok->text[tok->len++] = c;\
@@ -127,7 +127,7 @@ tokenize_string(
 	#undef push
 	#define push(c) {\
 		if (tok->len >= CSVTMT_STR_SIZE) {\
-			csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "token buffer overflow (2)");\
+			csvtmt_error_push(error, CSVTMT_ERR_BUF_OVERFLOW, "token buffer overflow (2)");\
 			return NULL;\
 		}\
 		tok->text[tok->len++] = c;\
@@ -168,7 +168,7 @@ tokenize_number(
 	#undef push
 	#define push(c) {\
 		if (tok->len >= CSVTMT_STR_SIZE) {\
-			csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "token buffer overflow (3)");\
+			csvtmt_error_push(error, CSVTMT_ERR_BUF_OVERFLOW, "token buffer overflow (3)");\
 			return NULL;\
 		}\
 		tok->text[tok->len++] = c;\
@@ -263,7 +263,7 @@ csvtmt_tokenizer_tokenize(
 		} else if (c1 == '?') {
 			store(CSVTMT_TK_PLACE_HOLDER);
 		} else {
-			csvtmt_error_format(error, CSVTMT_ERR_TOKENIZE, "not supported character '%c' on tokenize", c1);
+			csvtmt_error_push(error, CSVTMT_ERR_TOKENIZE, "not supported character '%c' on tokenize", c1);
 			goto fail;
 		}
 	}

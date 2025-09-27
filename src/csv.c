@@ -18,7 +18,7 @@ csvtmt_row_parse_string(
 	#define store() {\
 		if (any_read) {\
 			if (self->len >= csvtmt_numof(self->columns)) {\
-				csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "csv line columns overflow");\
+				csvtmt_error_push(error, CSVTMT_ERR_BUF_OVERFLOW, "csv line columns overflow");\
 				goto fail;\
 			}\
 			char *s = csvtmt_str_esc_del(buf);\
@@ -31,7 +31,7 @@ csvtmt_row_parse_string(
 	#undef push
 	#define push(c) {\
 		if (!csvtmt_str_push_back(buf, c)) {\
-			csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to push back to string buffer");\
+			csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to push back to string buffer");\
 			goto fail;\
 		}\
 	}\
@@ -52,7 +52,7 @@ csvtmt_row_parse_string(
 	errno = 0;
 	CsvTomatoString *buf = csvtmt_str_new();
 	if (!buf) {
-		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate string: %s", strerror(errno));
+		csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to allocate string: %s", strerror(errno));
 		return NULL;
 	}
 
@@ -152,7 +152,7 @@ csvtmt_row_parse_stream(
 	#define store() {\
 		if (any_read) {\
 			if (self->len >= csvtmt_numof(self->columns)) {\
-				csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "csv line columns overflow");\
+				csvtmt_error_push(error, CSVTMT_ERR_BUF_OVERFLOW, "csv line columns overflow");\
 				goto fail;\
 			}\
 			char *s = csvtmt_str_esc_del(buf);\
@@ -165,7 +165,7 @@ csvtmt_row_parse_stream(
 	#undef push
 	#define push(c) {\
 		if (!csvtmt_str_push_back(buf, c)) {\
-			csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to push back to string buffer");\
+			csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to push back to string buffer");\
 			goto fail;\
 		}\
 	}\
@@ -186,7 +186,7 @@ csvtmt_row_parse_stream(
 	errno = 0;
 	CsvTomatoString *buf = csvtmt_str_new();
 	if (!buf) {
-		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate string: %s", strerror(errno));
+		csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to allocate string: %s", strerror(errno));
 		return 0;
 	}
 
@@ -341,7 +341,7 @@ csvtmt_row_set_clone(
 	CsvTomatoError *error
 ) {
 	if (index >= self->len) {
-		csvtmt_error_format(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "index out of range");
+		csvtmt_error_push(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "index out of range");
 		return;
 	}
 

@@ -11,7 +11,7 @@ value_to_column(
 	void\
 	NAMESPACE ## _push(STRUCT *self, TYPE elem, CsvTomatoError *error) {\
 		if (self->len >= csvtmt_numof(self->array)) {\
-			csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "array overflow");\
+			csvtmt_error_push(error, CSVTMT_ERR_BUF_OVERFLOW, "array overflow");\
 			return;\
 		}\
 		self->array[self->len++] = elem;\
@@ -132,7 +132,7 @@ type_parse_column(
 
 	return;
 overflow:
-	csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "buffer overflow in parse type column");
+	csvtmt_error_push(error, CSVTMT_ERR_BUF_OVERFLOW, "buffer overflow in parse type column");
 }
 
 static void
@@ -145,13 +145,13 @@ header_parse_types(
 
 	for (size_t i = 0; i < row->len; i++) {
 		if (self->types_len >= csvtmt_numof(self->types)) {
-			csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "header types overflow");
+			csvtmt_error_push(error, CSVTMT_ERR_BUF_OVERFLOW, "header types overflow");
 			return;
 		}
 		CsvTomatoColumnType *type = &self->types[self->types_len++];
 		type_parse_column(type, row->columns[i], i, error);
 		if (error->error) {
-			csvtmt_error_format(error, CSVTMT_ERR_PARSE, "failed to parse header column");
+			csvtmt_error_push(error, CSVTMT_ERR_PARSE, "failed to parse header column");
 			return;
 		}
 	}
@@ -174,7 +174,7 @@ csvtmt_header_read_from_string(CsvTomatoHeader *self, const char *p, CsvTomatoEr
 	return p;
 
 failed_to_parse_types:
-	csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "failed to header types");
+	csvtmt_error_push(error, CSVTMT_ERR_BUF_OVERFLOW, "failed to header types");
 	return NULL;
 }
 
@@ -197,7 +197,7 @@ csvtmt_header_read_from_stream(CsvTomatoHeader *self, FILE *fp, CsvTomatoError *
 	csvtmt_row_final(&row);
 	return;
 failed_to_parse_types:
-	csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "failed to header types");
+	csvtmt_error_push(error, CSVTMT_ERR_BUF_OVERFLOW, "failed to header types");
 	return;
 }
 
@@ -206,7 +206,7 @@ csvtmt_header_read_from_table(CsvTomatoHeader *self, const char *table_path, Csv
 	errno = 0;
 	FILE *fp = fopen(table_path, "r");
 	if (!fp) {
-		csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to open table: %s: %s", table_path, strerror(errno));
+		csvtmt_error_push(error, CSVTMT_ERR_FILE_IO, "failed to open table: %s: %s", table_path, strerror(errno));
 		return;
 	}
 
@@ -226,7 +226,7 @@ csvtmt_header_read_from_table(CsvTomatoHeader *self, const char *table_path, Csv
 	csvtmt_row_final(&row);
 	return;
 failed_to_parse_types:
-	csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "failed to header types");
+	csvtmt_error_push(error, CSVTMT_ERR_BUF_OVERFLOW, "failed to header types");
 	return;
 }
 
@@ -326,7 +326,7 @@ gen_auto_increment_id(
 	return id;
 
 failed_to_open_file:
-	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to open id file: %s", strerror(errno));
+	csvtmt_error_push(error, CSVTMT_ERR_FILE_IO, "failed to open id file: %s", strerror(errno));
 	return 0;
 }
 
@@ -371,7 +371,7 @@ type_gen_column_default_value(
 
 	return;
 invalid_type_def:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to generate column default value");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to generate column default value");
 	return;
 fail_gen_id:
 	return;
@@ -591,32 +591,32 @@ csvtmt_update_all(CsvTomatoModel *model, CsvTomatoError *error) {
 	return CSVTMT_OK;
 
 failed_to_value_to_string:
-	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to value to string");
+	csvtmt_error_push(error, CSVTMT_ERR_FILE_IO, "failed to value to string");
 	return CSVTMT_ERROR;
 failed_to_rename_csv_file:
-	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to rename csv file");
+	csvtmt_error_push(error, CSVTMT_ERR_FILE_IO, "failed to rename csv file");
 	return CSVTMT_ERROR;
 failed_to_open_table:
-	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to open table: %s: %s", model->table_path, strerror(errno));
+	csvtmt_error_push(error, CSVTMT_ERR_FILE_IO, "failed to open table: %s: %s", model->table_path, strerror(errno));
 	return CSVTMT_ERROR;
 failed_to_open_tmp_file:
 	fclose(fin);
-	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to open tmp file: %s: %s", tmp_path, strerror(errno));
+	csvtmt_error_push(error, CSVTMT_ERR_FILE_IO, "failed to open tmp file: %s: %s", tmp_path, strerror(errno));
 	return CSVTMT_ERROR;
 failed_to_parse_stream:
 	fclose(fin);
 	fclose(fout);
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to parse stream");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to parse stream");
 	return CSVTMT_ERROR;
 failed_to_append_to_stream:
 	fclose(fin);
 	fclose(fout);
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to append to stream");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to append to stream");
 	return CSVTMT_ERROR;
 failed_to_replace:
 	fclose(fin);
 	fclose(fout);
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to replace column");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to replace column");
 	return CSVTMT_ERROR;
 }
 
@@ -655,7 +655,7 @@ csvtmt_store_column_infos(
 
 	return;
 array_overflow:
-	csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "array overflow");
+	csvtmt_error_push(error, CSVTMT_ERR_BUF_OVERFLOW, "array overflow");
 	return;
 }
 
@@ -670,7 +670,7 @@ csvtmt_store_selected_columns(CsvTomatoModel *model, CsvTomatoRow *row, CsvTomat
 	CsvTomatoColumnType *type;
 
 	if (tlen != row->len) {
-		csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid row length");
+		csvtmt_error_push(error, CSVTMT_ERR_EXEC, "invalid row length");
 		return;
 	}
 
@@ -689,7 +689,7 @@ csvtmt_store_selected_columns(CsvTomatoModel *model, CsvTomatoRow *row, CsvTomat
 				col = cols[ci];
 				if (!strcmp(type->type_name, col)) {
 					if (model->selected_columns_len >= csvtmt_numof(model->selected_columns)) {
-						csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "selected columns overflow");
+						csvtmt_error_push(error, CSVTMT_ERR_BUF_OVERFLOW, "selected columns overflow");
 						return;
 					}
 					model->selected_columns[ci] = row->columns[ti];
@@ -769,13 +769,13 @@ csvtmt_open_mmap(
 
 	return;
 failed_to_open_table:
-	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to open table");
+	csvtmt_error_push(error, CSVTMT_ERR_FILE_IO, "failed to open table");
 	return;
 failed_to_stat:
-	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to stat");
+	csvtmt_error_push(error, CSVTMT_ERR_FILE_IO, "failed to stat");
 	return;
 failed_to_mmap:
-	csvtmt_error_format(error, CSVTMT_ERR_MEM, "faled to mmap");
+	csvtmt_error_push(error, CSVTMT_ERR_MEM, "faled to mmap");
 	return;
 }
 
@@ -877,10 +877,10 @@ csvtmt_delete(CsvTomatoModel *model, CsvTomatoError *error) {
 
 	return CSVTMT_DONE;
 failed_to_parse_csv:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to parse csv line");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to parse csv line");
 	return CSVTMT_ERROR;
 array_overflow:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "array overflow");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "array overflow");
 	return CSVTMT_ERROR;
 	*/
 	return 0;
@@ -971,28 +971,28 @@ csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error) {
 failed_to_header_read:
 	return CSVTMT_ERROR;
 failed_to_replace_update:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to replace update");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to replace update");
 	return CSVTMT_ERROR;
 invalid_key_values_type:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid update key. \"%s\" is not in header types", not_found);
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "invalid update key. \"%s\" is not in header types", not_found);
 	return CSVTMT_ERROR;
 failed_to_stat:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to get table size: %s", strerror(errno));
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to get table size: %s", strerror(errno));
 	return CSVTMT_ERROR;
 failed_to_mmap:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to mmap. %s", strerror(errno));
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to mmap. %s", strerror(errno));
 	return CSVTMT_ERROR;
 failed_to_open_table:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to open table %s. %s", model->table_path, strerror(errno));
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to open table %s. %s", model->table_path, strerror(errno));
 	return CSVTMT_ERROR;
 failed_to_parse_csv:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to parse csv line");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to parse csv line");
 	return CSVTMT_ERROR;
 array_overflow:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "array overflow");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "array overflow");
 	return CSVTMT_ERROR;
 failed_to_append_lines:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to append csv lines");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to append csv lines");
 	return CSVTMT_ERROR;
 	*/
 	return 0;
@@ -1133,28 +1133,28 @@ ret_row:
 	// ここに到達したらファイルを開いたまま処理を継続する。
 	return CSVTMT_ROW;
 failed_to_store_selected_columns:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to store selected columns");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to store selected columns");
 	return CSVTMT_ERROR;
 failed_to_store_colinfo:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to store column info");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to store column info");
 	return CSVTMT_ERROR;
 failed_to_header_read:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to read header");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to read header");
 	return CSVTMT_ERROR;
 failed_to_parse_csv:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to parse csv line");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to parse csv line");
 	return CSVTMT_ERROR;
 failed_to_mmap:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to mmap. %s", strerror(errno));
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to mmap. %s", strerror(errno));
 	return CSVTMT_ERROR;
 failed_to_stat:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to get table size: %s", strerror(errno));
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to get table size: %s", strerror(errno));
 	return CSVTMT_ERROR;
 invalid_column:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid column name. \"%s\" is not in header types", not_found);
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "invalid column name. \"%s\" is not in header types", not_found);
 	return CSVTMT_ERROR;
 failed_to_open_table:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to open table %s. %s", model->table_path, strerror(errno));
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to open table %s. %s", model->table_path, strerror(errno));
 	return CSVTMT_ERROR;
 	*/
 	return 0;
@@ -1290,38 +1290,38 @@ csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error) {
 	return CSVTMT_OK;
 
 failed_to_wrap_column:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to wrap column");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to wrap column");
 	cleanup();
 	return CSVTMT_ERROR;
 failed_to_allocate_buffer:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to allocate buffer");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to allocate buffer");
 	cleanup();
 	return CSVTMT_ERROR;
 failed_to_gen_type_string:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to generate type column value");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to generate type column value");
 	cleanup();
 	return CSVTMT_ERROR;
 failed_to_header_read:
 	cleanup();
 	return CSVTMT_ERROR;
 invalid_column:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid column name. \"%s\" is not in header types", not_found);
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "invalid column name. \"%s\" is not in header types", not_found);
 	cleanup();
 	return CSVTMT_ERROR;
 invalid_values_len:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid values length. column names len is \"%ld\" but values length is \"%ld\"", model->column_names_len, model->values_len);
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "invalid values length. column names len is \"%ld\" but values length is \"%ld\"", model->column_names_len, model->values_len);
 	cleanup();
 	return CSVTMT_ERROR;
 invalid_value_kind:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid value kind");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "invalid value kind");
 	cleanup();
 	return CSVTMT_ERROR;
 failed_to_open_table:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to open table %s. %s", model->table_path, strerror(errno));
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to open table %s. %s", model->table_path, strerror(errno));
 	cleanup();
 	return CSVTMT_ERROR;
 values_index_out_of_ragen:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "values index out of range");
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "values index out of range");
 	cleanup();
 	return CSVTMT_ERROR;
 }
@@ -1357,7 +1357,7 @@ csvtmt_append_rows_to_table(
 ) {
 	FILE *fp = fopen(table_path, "a");
 	if (!fp) {
-		csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to open table: %s: %s", table_path, strerror(errno));
+		csvtmt_error_push(error, CSVTMT_ERR_FILE_IO, "failed to open table: %s: %s", table_path, strerror(errno));
 		return;
 	}
 
