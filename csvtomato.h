@@ -168,6 +168,9 @@ typedef enum {
 * types *
 ********/
 
+struct CsvTomatoErrorElem;
+typedef struct CsvTomatoErrorElem CsvTomatoErrorElem;
+
 struct CsvTomatoError;
 typedef struct CsvTomatoError CsvTomatoError;
 
@@ -251,10 +254,15 @@ DECL_ARRAY(CsvTomatoRows, csvtmt_rows, CsvTomatoRow)
 * structs *
 **********/
 
-struct CsvTomatoError {
-	bool error;
+struct CsvTomatoErrorElem {
 	CsvTomatoErrorKind kind;
 	char message[CSVTMT_ERR_MSG_SIZE];
+};
+
+struct CsvTomatoError {
+	bool error;
+	CsvTomatoErrorElem elems[100];
+	size_t len;
 };
 
 struct CsvTomatoToken {
@@ -585,7 +593,7 @@ void
 csvtmt_error_clear(CsvTomatoError *self);
 
 void
-csvtmt_error_format(
+csvtmt_error_push(
 	CsvTomatoError *self,
 	CsvTomatoErrorKind kind,
 	const char *fmt,

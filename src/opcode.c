@@ -5,7 +5,7 @@ csvtmt_opcode_new(CsvTomatoError *error) {
 	errno = 0;
 	CsvTomatoOpcode *self = calloc(1, sizeof(*self));
 	if (!self) {
-		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocat memory: %s", strerror(errno));
+		csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to allocat memory: %s", strerror(errno));
 		return NULL;
 	}
 
@@ -14,7 +14,7 @@ csvtmt_opcode_new(CsvTomatoError *error) {
 	self->elems = calloc(self->capa + 1, byte);
 	if (!self->elems) {
 		free(self);
-		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocat memory (2): %s", strerror(errno));
+		csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to allocat memory (2): %s", strerror(errno));
 		return NULL;
 	}
 
@@ -94,7 +94,7 @@ resize(CsvTomatoOpcode *self, size_t new_capa, CsvTomatoError *error) {
 	errno = 0;
 	void *elems = realloc(self->elems, size);
 	if (!elems) {
-		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to re-allocate memory: %s", strerror(errno));
+		csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to re-allocate memory: %s", strerror(errno));
 		return;
 	}
 
@@ -688,7 +688,7 @@ opcode_number(
 			return;
 		}
 	} else {
-		csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "invalid state in number");
+		csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "invalid state in number");
 		return;
 	}
 }

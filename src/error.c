@@ -14,30 +14,44 @@ csvtmt_die(const char *s) {
 }
 
 void
-csvtmt_error_format(
+csvtmt_error_push(
 	CsvTomatoError *self,
 	CsvTomatoErrorKind kind,
 	const char *fmt,
 	...
 ) {
 	self->error = true;
-	self->kind = kind;
+
+	if (self->len >= csvtmt_numof(self->elems)) {
+		fprintf(stderr, "csvtomato: error elements overflow\n");
+		return;
+	}
+
+	CsvTomatoErrorElem *elem = &self->elems[self->len++];
+
+	elem->kind = kind;
 
 	va_list args;
 	va_start(args, fmt);
 
-	vsnprintf(self->message, sizeof self->message, fmt, args);
+	vsnprintf(elem->message, sizeof elem->message, fmt, args);
 
 	va_end(args);
 }
 
 void
 csvtmt_error_show(const CsvTomatoError *self) {
-	printf("error: %d: %s\n", self->kind, self->message);
+	for (size_t i = 0; i < self->len; i++) {
+		const CsvTomatoErrorElem *elem = &self->elems[i];
+		printf("error: %d: %s\n", elem->kind, elem->message);
+	}
 	fflush(stdout);
 }
 
 const char *
 csvtmt_error_msg(const CsvTomatoError *self) {
-	return self->message;
+	if (!self->error) {
+		return "nothing error";
+	}
+	return self->elems[0].message;
 }

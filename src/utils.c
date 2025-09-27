@@ -4,7 +4,7 @@ char *
 csvtmt_wrap_column(const char *col, CsvTomatoError *error) {
 	CsvTomatoString *s = csvtmt_str_new();
 	if (!s) {
-		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate string");
+		csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to allocate string");
 		return NULL;
 	}
 
@@ -38,7 +38,7 @@ csvtmt_strdup(const char *s, CsvTomatoError *error) {
 	errno = 0;
 	char *p = malloc(len + 1);
 	if (!p) {
-		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
+		csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
 		return NULL;
 	}
 

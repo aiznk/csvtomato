@@ -37,7 +37,7 @@ fail:
 	csvtmt_stmt_del(self);
 	return NULL;
 failed_to_calloc:
-	csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory");
+	csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to allocate memory");
 	return NULL;
 }
 
@@ -116,13 +116,13 @@ csvtmt_open(
 	errno = 0;
 	CsvTomato *self = calloc(1, sizeof(*self));
 	if (!self) {
-		csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
+		csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
 		return NULL;
 	}
 
 	if (!csvtmt_file_exists(db_dir)) {
 		free(self);
-		csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "%s database does not exists", db_dir);
+		csvtmt_error_push(error, CSVTMT_ERR_FILE_IO, "%s database does not exists", db_dir);
 		return NULL;
 	}
 
@@ -240,7 +240,7 @@ csvtmt_bind_text(
 
 	return;
 failed_to_calloc:
-	csvtmt_error_format(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
+	csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to allocate memory: %s", strerror(errno));
 	return;
 }
 
@@ -327,12 +327,12 @@ csvtmt_finalize(CsvTomatoStmt *stmt) {
 int
 csvtmt_column_int(CsvTomatoStmt *stmt, size_t index, CsvTomatoError *error) {
 	if (!stmt->model.selected_columns_len) {
-		csvtmt_error_format(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "row columns length is 0");
+		csvtmt_error_push(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "row columns length is 0");
 		return -1;
 	}
 
 	if (index >= stmt->model.selected_columns_len) {
-		csvtmt_error_format(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "index out of range");
+		csvtmt_error_push(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "index out of range");
 		return -1;
 	}
 
@@ -342,12 +342,12 @@ csvtmt_column_int(CsvTomatoStmt *stmt, size_t index, CsvTomatoError *error) {
 double
 csvtmt_column_double(CsvTomatoStmt *stmt, size_t index, CsvTomatoError *error) {
 	if (!stmt->model.selected_columns_len) {
-		csvtmt_error_format(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "row columns length is 0");
+		csvtmt_error_push(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "row columns length is 0");
 		return -1.0;
 	}
 
 	if (index >= stmt->model.selected_columns_len) {
-		csvtmt_error_format(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "index out of range");
+		csvtmt_error_push(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "index out of range");
 		return -1.0;
 	}
 
@@ -357,12 +357,12 @@ csvtmt_column_double(CsvTomatoStmt *stmt, size_t index, CsvTomatoError *error) {
 const char *
 csvtmt_column_text(CsvTomatoStmt *stmt, size_t index, CsvTomatoError *error) {
 	if (!stmt->model.selected_columns_len) {
-		csvtmt_error_format(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "row columns length is 0");
+		csvtmt_error_push(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "row columns length is 0");
 		return NULL;
 	}
 
 	if (index >= stmt->model.selected_columns_len) {
-		csvtmt_error_format(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "index out of range");
+		csvtmt_error_push(error, CSVTMT_ERR_INDEX_OUT_OF_RANGE, "index out of range");
 		return NULL;
 	}
 
