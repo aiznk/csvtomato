@@ -15,7 +15,8 @@ $ ./csvtomato.out
 `csvtomato.out`を実行するとシェルが起動します。
 
 ```
-$ ./csvtomato.out
+$ mkdir test_db
+$ ./csvtomato.out test_db
 test_db > 
 ```
 
