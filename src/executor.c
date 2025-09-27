@@ -407,8 +407,8 @@ csvtmt_executor_exec(
 			model->skip = false;
 			model->save_opcodes_index = model->opcodes_index;
 			model->column_names_is_star = false;
-			// printf("save_opcodes_index[%ld]\n", model->save_opcodes_index);
-			// puts("init");
+			model->selected_columns_len = 0;
+			model->column_names_len = 0;
 
 			csvtmt_parse_row_from_mmap(model, error);
 			if (error->error) {
