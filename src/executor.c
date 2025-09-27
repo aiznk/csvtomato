@@ -21,6 +21,29 @@ csvtmt_executor_del(CsvTomatoExecutor *self) {
 	free(self);
 }
 
+static void
+store_table_path(CsvTomatoModel *model, const char *table_name) {
+	snprintf(model->table_path, sizeof model->table_path, "%s/%s.csv", model->db_dir, table_name);
+}
+
+size_t 
+skip_to(
+	CsvTomatoModel *self,
+	const CsvTomatoOpcodeElem *opcodes,
+	size_t opcodes_len,
+	CsvTomatoOpcodeKind kind,
+	CsvTomatoError *error
+) {
+	for (size_t i = self->opcodes_index; i < opcodes_len; i++) {
+		const CsvTomatoOpcodeElem *op = &opcodes[i];
+		if (op->kind == kind) {
+			return i;
+		}
+	}
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "not found opcode kind on skip");
+	return 0;
+}
+
 CsvTomatoResult
 csvtmt_executor_exec(
 	CsvTomatoExecutor *self,
@@ -62,12 +85,18 @@ csvtmt_executor_exec(
 		dst = model->stack[--model->stack_len];\
 	}\
 
+	#define stack_top(dst) {\
+		if (model->stack_len == 0) {\
+			goto stack_underflow;\
+		}\
+		dst = model->stack[model->stack_len-1];\
+	}\
+
 	CsvTomatoString *buf = csvtmt_str_new();
 	if (!buf) {
 		goto failed_to_allocate_buffer;
 	}
 
-	CsvTomatoOpcodeKind op_kind;
 	CsvTomatoStackElem pop;
 	CsvTomatoResult result = CSVTMT_DONE;
 
@@ -78,7 +107,6 @@ csvtmt_executor_exec(
 
 		switch (op->kind) {
 		case CSVTMT_OP_NONE: 
-			op_kind = op->kind;
 			goto invalid_op_kind;
 			break;
 		case CSVTMT_OP_STAR: {
@@ -87,29 +115,253 @@ csvtmt_executor_exec(
 		case CSVTMT_OP_PLACE_HOLDER: {
 			goto found_place_holder;
 		} break;
-		case CSVTMT_OP_IDENT: {
-			CsvTomatoStackElem elem = {0};
-			elem.kind = CSVTMT_STACK_ELEM_IDENT;
-			elem.obj.ident.value = op->obj.ident.value;
-			stack_push(elem);
-		} break;
+
+		/*
+			UPDATE users SET age = 1, name = "Taro" WHERE age == 1 AND name = "Ken"; 
+			↓
+			[
+				update_beg,
+					update_set_beg,
+						ident, int, assign,
+						ident, string, assign,
+					update_set_end,
+					where_beg,
+						ident, int, equal,
+						ident, string, equal,
+						and,
+					where_end,
+				update_end,
+			] {
+				update_beg {
+					if !opened {
+						open_mmap
+					}
+					row = read_row
+				}
+				update_set_beg {
+					push update_set_beg -> [update_set_beg]
+				}
+				push ident -> [update_set_beg, ident]
+				push int -> [update_set_beg, ident, int]
+				assign {
+					int = pop <- [update_set_beg, ident, int]
+					ident = pop <- [update_set_beg, ident]
+					push key_value(ident, int) -> [update_set_beg, key_value]
+				}
+				push ident -> [update_set_beg, key_value, ident]
+				push string -> [update_set_beg, key_value, ident, string]
+				assign {
+					string = pop <- [update_set_beg, key_value, ident, string]
+					ident = pop <- [update_set_beg, key_value, ident]
+					push key_value(ident, string) -> [update_set_beg, key_value, key_value]
+				}
+				where_beg {
+				}
+				push ident -> [update_set_beg, key_value, key_value, ident]
+				push int -> [update_set_beg, key_value, key_value, ident, int]
+				equal {
+					pop int <- [update_set_beg, key_value, key_value, ident, int]
+					pop ident <- [update_set_beg, key_value, key_value, ident]
+					push (row[ident] == int) -> [update_set_beg, key_value, key_value, bool]
+				}
+				push ident -> [update_set_beg, key_value, key_value, bool, ident]
+				push string -> [update_set_beg, key_value, key_value, bool, ident, string]
+				equal {
+					pop string <- [update_set_beg, key_value, key_value, bool, ident, string]
+					pop ident <- [update_set_beg, key_value, key_value, bool, ident]
+					push (row[ident] == string) -> [update_set_beg, key_value, key_value, bool, bool]
+				}
+				and {
+					lhs = pop <- [update_set_beg, key_value, key_value, bool, bool]
+					rhs = pop <- [update_set_beg, key_value, key_value, bool]
+					push (lhs == rhs) -> [update_set_beg, key_value, key_value, bool]
+				}
+				update_end {
+					if stack_top is not bool {
+						// update all
+						replace_row(row)
+						push_rows(row)
+					} else {
+						bool = pop <- [update_set_beg, key_value, key_value, bool]
+						if bool {
+							replace_row(row)
+							push_rows(row)
+						}
+					}
+					if *ptr == '\0' {
+						close_mmap
+						open_fp
+						append_rows
+					} else {
+						goto update_beg;
+					}
+				}
+			}
+		*/
 		case CSVTMT_OP_UPDATE_STMT_BEG: {
-			model->table_name = op->obj.update_stmt.table_name;
-			snprintf(model->table_path, sizeof model->table_path, "%s/%s.csv", model->db_dir, model->table_name);
-			model->update_set_key_values_len = 0;
-			model->where_key_values_len = 0;
-		} break;
-		case CSVTMT_OP_UPDATE_STMT_END: {
-			csvtmt_update(model, error);
+			if (model->mmap.fd == 0) {
+				model->table_name = op->obj.update_stmt.table_name;
+				store_table_path(model, model->table_name);
+				model->update_set_key_values_len = 0;
+
+				csvtmt_open_mmap_for_read_write(model, model->table_path, error);
+				if (error->error) {
+					goto failed_to_open_mmap;
+				}				
+
+				model->mmap.cur = (char *) csvtmt_header_read_from_string(&model->header, model->mmap.cur, error);
+				if (error->error) {
+					goto failed_to_read_header;
+				}
+
+				if (model->rows) {
+					csvtmt_clear_rows(model->rows);
+				} else {
+					model->rows = csvtmt_rows_new();
+					if (!model->rows) {
+						goto failed_to_allocate_rows;
+					}
+				}
+			}
+
+			model->save_opcodes_index = model->opcodes_index;
+			model->row_head = model->mmap.cur;
+			model->skip = false;
+
+			csvtmt_parse_row_from_mmap(model, error);
 			if (error->error) {
-				goto update_error;
+				goto failed_to_parse_row;
+			}
+			if (csvtmt_is_deleted_row(&model->row)) {
+				model->opcodes_index = skip_to(
+					model,
+					opcodes,
+					opcodes_len,
+					CSVTMT_OP_UPDATE_STMT_END,
+					error
+				);
+				model->opcodes_index--;
+				model->skip = true;
+				csvtmt_row_final(&model->row);
+				continue;
 			}
 		} break;
+		case CSVTMT_OP_UPDATE_STMT_END: {
+			if (model->skip) {
+				if (*model->mmap.cur == '\0') {
+					csvtmt_close_mmap(model);
+					csvtmt_append_rows_to_table(
+						model->table_path,
+						model->rows,
+						false,
+						error
+					);
+					if (error->error) {
+						goto failed_to_append_rows;
+					}
+					csvtmt_clear_rows(model->rows);
+					csvtmt_row_final(&model->row);
+				} else {
+					model->opcodes_index = model->save_opcodes_index-1;
+				}
+				continue;
+			}
+
+			if (model->stack_len) {
+				CsvTomatoStackElem top;
+				stack_top(top);
+
+				if (top.kind != CSVTMT_STACK_ELEM_BOOL_VALUE) {
+					csvtmt_close_mmap(model);
+					csvtmt_update_all(model, error);
+					if (error->error) {
+						goto failed_to_update_all;
+					}
+					csvtmt_clear_rows(model->rows);
+					csvtmt_row_final(&model->row);
+				} else {
+					if (top.obj.bool_value.value) {
+						// match WHERE
+						CsvTomatoColumnInfoArray infos = {0};
+						csvtmt_store_column_infos(
+							model,
+							&infos,
+							model->update_set_key_values,
+							model->update_set_key_values_len,
+							error
+						);
+						if (error->error) {
+							goto failed_to_store_col_infos;
+						}
+						csvtmt_delete_row_head(model);
+						csvtmt_replace_row(model, &model->row, &infos, error);
+						if (error->error) {
+							goto failed_to_replace_row;
+						}
+						if (!csvtmt_rows_push_back(model->rows, model->row)) {
+							goto failed_to_push_row;
+						}
+						memset(&model->row, 0, sizeof(model->row));
+					}
+					if (*model->mmap.cur == '\0') {
+						csvtmt_close_mmap(model);
+						csvtmt_append_rows_to_table(
+							model->table_path,
+							model->rows,
+							false,
+							error
+						);
+						if (error->error) {
+							goto failed_to_append_rows;
+						}
+						csvtmt_clear_rows(model->rows);
+						csvtmt_row_final(&model->row);
+					} else {
+						model->opcodes_index = model->save_opcodes_index-1;
+						csvtmt_row_final(&model->row);
+					}
+				}
+			} else {
+				csvtmt_close_mmap(model);
+				csvtmt_update_all(model, error);
+				if (error->error) {
+					goto failed_to_update_all;
+				}
+				csvtmt_clear_rows(model->rows);
+				csvtmt_row_final(&model->row);
+			}
+		} break;
+		case CSVTMT_OP_UPDATE_SET_BEG: {
+			model->update_set_key_values_len = 0;
+			model->mode = CSVTMT_MODE_UPDATE_SET;
+			stack_push_kind(CSVTMT_STACK_ELEM_UPDATE_SET_BEG);
+		} break;
+		case CSVTMT_OP_UPDATE_SET_END: {
+			while (model->stack_len) {
+				stack_pop(pop);
+
+				if (pop.kind == CSVTMT_STACK_ELEM_UPDATE_SET_BEG) {
+					break;
+				}
+				switch (pop.kind) {
+				default: goto invalid_stack_elem_kind; break;
+				case CSVTMT_STACK_ELEM_KEY_VALUE: {
+					if (model->update_set_key_values_len >= csvtmt_numof(model->update_set_key_values)) {
+						goto array_overflow;
+					}
+				 	CsvTomatoKeyValue *kv =  &model->update_set_key_values[model->update_set_key_values_len++];
+				 	kv->key = pop.obj.key_value.key;
+				 	kv->value = pop.obj.key_value.value;
+				 	// printf("kv->key[%s]\n", kv->key);
+				} break;
+				}
+			}
+		} break;
+
 		case CSVTMT_OP_SELECT_STMT_BEG: {
 			model->table_name = op->obj.select_stmt.table_name;
 			model->column_names_len = 0;
-
-			snprintf(model->table_path, sizeof model->table_path, "%s/%s.csv", model->db_dir, model->table_name);
+			store_table_path(model, model->table_name);
 		} break;
 		case CSVTMT_OP_SELECT_STMT_END: {
 			result = csvtmt_select(model, error);
@@ -124,8 +376,7 @@ csvtmt_executor_exec(
 			model->table_name = op->obj.insert_stmt.table_name;
 			model->column_names_len = 0;
 			model->values_len = 0;
-
-			snprintf(model->table_path, sizeof model->table_path, "%s/%s.csv", model->db_dir, model->table_name);
+			store_table_path(model, model->table_name);
 		} break;
 		case CSVTMT_OP_INSERT_STMT_END: {
 			csvtmt_insert(model, error);
@@ -133,16 +384,214 @@ csvtmt_executor_exec(
 				goto insert_error;
 			}			
 		} break;
+
+		// DELETE 
+		/*
+			DELETE FROM users WHERE age = 123 AND id < 10;
+			↓	
+			op [
+				delete_beg,
+			    where_beg,
+					ident, int, equal, 
+			        ident, int, lt, 
+			        and, 
+                where_end, 
+			    delete_end,
+			] {
+				delete_beg {
+					if !opened {
+						open_mmap 
+						beg_index = i
+					}
+					row = read_row
+					mode = FIRST
+				}
+				where_beg {
+					mode = WHERE_MODE
+				}
+				push ident -> [ident]
+				push int -> [ident, int]
+				equal (assign) {
+					int = pop <- [ident, int]
+					ident = pop <- [ident]
+					push (row[ident] == int) -> [bool]
+				}
+				push ident -> [bool, ident]
+				push int -> [bool, ident, int]
+				lt {
+					int = pop <- [bool, ident, int]
+					ident = pop <- [bool, ident]
+					push (row[ident] < int) -> [bool, bool]
+				}
+				and {
+					lhs = pop <- [bool, bool]
+					rhs = pop <- [bool]
+					push (lhs && rhs) -> [bool]
+				}
+				where_end {
+				}
+				delete_end {
+					if stack_top is not bool {
+						*head = '1' // all deletion
+					} else {
+						do_delete = pop <- [bool]
+						if do_delete {
+							*head = '1'
+						}	
+					}
+				}
+			}
+		*/
 		case CSVTMT_OP_DELETE_STMT_BEG: {
-			model->table_name = op->obj.delete_stmt.table_name;
-			snprintf(model->table_path, sizeof model->table_path, "%s/%s.csv", model->db_dir, model->table_name);
-			model->where_key_values_len = 0;
+			if (model->mmap.fd == 0) {
+				model->table_name = op->obj.delete_stmt.table_name;
+				store_table_path(model, model->table_name);
+				csvtmt_open_mmap_for_read_write(model, model->table_path, error);
+				if (error->error) {
+					goto failed_to_open_mmap;
+				}
+				
+				model->mmap.cur = (char *) csvtmt_header_read_from_string(&model->header, model->mmap.cur, error);	
+				if (error->error) {
+					goto failed_to_read_header;
+				}
+			}
+
+			model->mode = CSVTMT_MODE_FIRST;
+			model->save_opcodes_index = model->opcodes_index;
+
+			model->row_head = model->mmap.cur;
+			csvtmt_parse_row_from_mmap(model, error);
+			if (error->error) {
+				goto failed_to_parse_row;
+			}
+
 		} break;
 		case CSVTMT_OP_DELETE_STMT_END: {
-			csvtmt_delete(model, error);
-			if (error->error) {
-				goto delete_error;
+			if (model->stack_len) {
+				CsvTomatoStackElem top;
+				stack_top(top);
+				if (top.kind != CSVTMT_STACK_ELEM_BOOL_VALUE) {
+					csvtmt_delete_row_head(model);
+				} else if (top.obj.bool_value.value) {
+					csvtmt_delete_row_head(model);
+				}
+			} else {
+				csvtmt_delete_row_head(model);
 			}
+			if (*model->mmap.cur == '\0') {
+				csvtmt_close_mmap(model);
+			} else {
+				model->opcodes_index = model->save_opcodes_index-1;
+			}
+			csvtmt_row_final(&model->row);
+		} break;
+
+		// WHERE
+		case CSVTMT_OP_WHERE_BEG: {
+			model->mode = CSVTMT_MODE_WHERE;
+		} break;
+		case CSVTMT_OP_WHERE_END: {
+			model->mode = CSVTMT_MODE_FIRST;
+		} break;
+
+		// ASSIGN
+		case CSVTMT_OP_ASSIGN: {
+			CsvTomatoStackElem lhs, rhs;
+			stack_pop(rhs);
+			stack_pop(lhs);
+
+			switch (lhs.kind) {
+			default: goto invalid_elem_kind; break;
+			case CSVTMT_STACK_ELEM_IDENT: {
+				switch (rhs.kind) {
+				default: goto invalid_elem_kind; break;
+				case CSVTMT_STACK_ELEM_INT_VALUE: {
+					CsvTomatoStackElem elem = {0};
+					elem.kind = CSVTMT_STACK_ELEM_BOOL_VALUE;
+					int index = csvtmt_find_type_index(model, lhs.obj.ident.value);
+					if (index == -1) {
+						goto not_found_type_name;	
+					}
+
+					switch (model->mode) {
+					default: goto invalid_mode; break;
+					case CSVTMT_MODE_WHERE: {
+						const char *col = model->row.columns[index];
+						char num[CSVTMT_NUM_STR_SIZE];
+						snprintf(num, sizeof num, "%ld", rhs.obj.int_value.value);
+						elem.obj.bool_value.value = !strcmp(num, col);
+						stack_push(elem);
+					} break;
+					case CSVTMT_MODE_UPDATE_SET: {
+						elem.kind = CSVTMT_STACK_ELEM_KEY_VALUE;
+						elem.obj.key_value.key = lhs.obj.ident.value;
+						elem.obj.key_value.value.kind = CSVTMT_VAL_INT;
+						elem.obj.key_value.value.int_value = rhs.obj.int_value.value;
+						stack_push(elem);
+					} break;
+					}
+				} break;
+				case CSVTMT_STACK_ELEM_DOUBLE_VALUE: {
+					CsvTomatoStackElem elem = {0};
+					elem.kind = CSVTMT_STACK_ELEM_BOOL_VALUE;
+					int index = csvtmt_find_type_index(model, lhs.obj.ident.value);
+					if (index == -1) {
+						goto not_found_type_name;	
+					}
+
+					switch (model->mode) {
+					default: goto invalid_mode; break;
+					case CSVTMT_MODE_WHERE: {
+						const char *col = model->row.columns[index];
+						char num[CSVTMT_NUM_STR_SIZE];
+						snprintf(num, sizeof num, "%f", rhs.obj.double_value.value);
+						elem.obj.bool_value.value = !strcmp(num, col);
+						stack_push(elem);
+					} break;
+					case CSVTMT_MODE_UPDATE_SET: {
+						elem.kind = CSVTMT_STACK_ELEM_KEY_VALUE;
+						elem.obj.key_value.key = lhs.obj.ident.value;
+						elem.obj.key_value.value.kind = CSVTMT_VAL_DOUBLE;
+						elem.obj.key_value.value.double_value = rhs.obj.double_value.value;
+						stack_push(elem);
+					} break;
+					}
+				} break;
+				case CSVTMT_STACK_ELEM_STRING_VALUE: {
+					CsvTomatoStackElem elem = {0};
+					elem.kind = CSVTMT_STACK_ELEM_BOOL_VALUE;
+					int index = csvtmt_find_type_index(model, lhs.obj.ident.value);
+					if (index == -1) {
+						goto not_found_type_name;	
+					}
+
+					switch (model->mode) {
+					default: goto invalid_mode; break;
+					case CSVTMT_MODE_WHERE: {
+						const char *col = model->row.columns[index];
+						elem.obj.bool_value.value = !strcmp(rhs.obj.string_value.value, col);
+						stack_push(elem);
+					} break;
+					case CSVTMT_MODE_UPDATE_SET: {
+						elem.kind = CSVTMT_STACK_ELEM_KEY_VALUE;
+						elem.obj.key_value.key = lhs.obj.ident.value;
+						elem.obj.key_value.value.kind = CSVTMT_VAL_STRING;
+						elem.obj.key_value.value.string_value = rhs.obj.string_value.value;
+						stack_push(elem);
+					} break;
+					}
+				} break;
+				}
+			} break;
+			}
+		} break;
+
+		case CSVTMT_OP_IDENT: {
+			CsvTomatoStackElem elem = {0};
+			elem.kind = CSVTMT_STACK_ELEM_IDENT;
+			elem.obj.ident.value = op->obj.ident.value;
+			stack_push(elem);
 		} break;
 		case CSVTMT_OP_COLUMN_NAMES_BEG: {
 			stack_push_kind(CSVTMT_STACK_ELEM_COLUMN_NAMES_BEG);
@@ -157,7 +606,7 @@ csvtmt_executor_exec(
 					break;
 				}
 				switch (pop.kind) {
-				default: goto invalid_op_kind; break;
+				default: goto invalid_elem_kind; break;
 				case CSVTMT_STACK_ELEM_STAR:
 					if (model->column_names_is_star) {
 						goto multiple_star_error;
@@ -209,7 +658,7 @@ csvtmt_executor_exec(
 				CsvTomatoValue *value = &tmp_value_array[tmp_value_array_len++];
 
 				switch (pop.kind) {
-				default: goto invalid_op_kind; break;
+				default: goto invalid_elem_kind; break;
 				case CSVTMT_STACK_ELEM_INT_VALUE:
 					value->kind = CSVTMT_VAL_INT;
 					value->int_value = pop.obj.int_value.value;
@@ -234,94 +683,6 @@ csvtmt_executor_exec(
 
 			model->values_len++;
 			// printf("values_len %ld\n", model->values_len);
-		} break;
-		case CSVTMT_OP_UPDATE_SET_BEG: {
-			model->update_set_key_values_len = 0;
-			stack_push_kind(CSVTMT_STACK_ELEM_UPDATE_SET_BEG);
-		} break;
-		case CSVTMT_OP_UPDATE_SET_END: {
-			while (model->stack_len) {
-				stack_pop(pop);
-
-				if (pop.kind == CSVTMT_STACK_ELEM_UPDATE_SET_BEG) {
-					break;
-				}
-				switch (pop.kind) {
-				default: goto invalid_stack_elem_kind; break;
-				case CSVTMT_STACK_ELEM_KEY_VALUE: {
-					if (model->update_set_key_values_len >= csvtmt_numof(model->update_set_key_values)) {
-						goto array_overflow;
-					}
-				 	CsvTomatoKeyValue *kv =  &model->update_set_key_values[model->update_set_key_values_len++];
-				 	kv->key = pop.obj.key_value.key;
-				 	kv->value = pop.obj.key_value.value;
-				 	// printf("kv->key[%s]\n", kv->key);
-				} break;
-				}
-			}
-		} break;
-		case CSVTMT_OP_WHERE_BEG: {
-			model->where_key_values_len = 0;
-			stack_push_kind(CSVTMT_STACK_ELEM_WHERE_BEG);
-		} break;
-		case CSVTMT_OP_WHERE_END: {
-			while (model->stack_len) {
-				stack_pop(pop);
-
-				if (pop.kind == CSVTMT_STACK_ELEM_WHERE_BEG) {
-					break;
-				}
-				switch (pop.kind) {
-				default: goto invalid_stack_elem_kind; break;
-				case CSVTMT_STACK_ELEM_KEY_VALUE: {
-					if (model->where_key_values_len >= csvtmt_numof(model->where_key_values)) {
-						goto array_overflow;
-					}
-				 	CsvTomatoKeyValue *kv =  &model->where_key_values[model->where_key_values_len++];
-				 	kv->key = pop.obj.key_value.key;
-				 	kv->value = pop.obj.key_value.value;
-				 	// printf("where kv->key[%s]\n", kv->key);
-				} break;
-				}
-			}
-		} break;
-		case CSVTMT_OP_ASSIGN: {
-			CsvTomatoStackElem lhs, rhs;
-			stack_pop(rhs);
-			stack_pop(lhs);
-
-			switch (lhs.kind) {
-			default: goto invalid_op_kind; break;
-			case CSVTMT_STACK_ELEM_IDENT: {
-				switch (rhs.kind) {
-				default: goto invalid_op_kind; break;
-				case CSVTMT_STACK_ELEM_INT_VALUE: {
-					CsvTomatoStackElem elem = {0};
-					elem.kind = CSVTMT_STACK_ELEM_KEY_VALUE,
-					elem.obj.key_value.key = lhs.obj.ident.value;
-					elem.obj.key_value.value.kind = CSVTMT_VAL_INT;
-					elem.obj.key_value.value.int_value = rhs.obj.int_value.value;
-					stack_push(elem);
-				} break;
-				case CSVTMT_STACK_ELEM_DOUBLE_VALUE: {
-					CsvTomatoStackElem elem = {0};
-					elem.kind = CSVTMT_STACK_ELEM_KEY_VALUE,
-					elem.obj.key_value.key = lhs.obj.ident.value;
-					elem.obj.key_value.value.kind = CSVTMT_VAL_DOUBLE;
-					elem.obj.key_value.value.double_value = rhs.obj.double_value.value;
-					stack_push(elem);
-				} break;
-				case CSVTMT_STACK_ELEM_STRING_VALUE: {
-					CsvTomatoStackElem elem = {0};
-					elem.kind = CSVTMT_STACK_ELEM_KEY_VALUE,
-					elem.obj.key_value.key = lhs.obj.ident.value;
-					elem.obj.key_value.value.kind = CSVTMT_VAL_STRING;
-					elem.obj.key_value.value.string_value = rhs.obj.string_value.value;
-					stack_push(elem);
-				} break;
-				}
-			} break;
-			}
 		} break;
 		case CSVTMT_OP_STRING_VALUE: {
 			CsvTomatoStackElem elem = {0};
@@ -421,6 +782,50 @@ csvtmt_executor_exec(
 ret_row:
 	cleanup();
 	return CSVTMT_ROW;
+failed_to_push_row:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to push row");
+	cleanup();
+	return CSVTMT_ERROR;
+failed_to_replace_row:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to replace row");
+	cleanup();
+	return CSVTMT_ERROR;
+failed_to_update_all:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to update all");
+	cleanup();
+	return CSVTMT_ERROR;
+failed_to_store_col_infos:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to store column infos");
+	cleanup();
+	return CSVTMT_ERROR;
+failed_to_allocate_rows:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to allocate rows");
+	cleanup();
+	return CSVTMT_ERROR;
+failed_to_append_rows:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to append rows");
+	cleanup();
+	return CSVTMT_ERROR;
+invalid_mode:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid mode");
+	cleanup();
+	return CSVTMT_ERROR;
+not_found_type_name:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "not found type name");
+	cleanup();
+	return CSVTMT_ERROR;
+failed_to_parse_row:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to parse row");
+	cleanup();
+	return CSVTMT_ERROR;
+failed_to_read_header:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to read header");
+	cleanup();
+	return CSVTMT_ERROR;
+failed_to_open_mmap:
+	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to open mmap");
+	cleanup();
+	return CSVTMT_ERROR;
 inavlid_column_names_with_star:
 	csvtmt_error_format(error, CSVTMT_ERR_SYNTAX, "invalid column names. found star");
 	cleanup();
@@ -464,21 +869,19 @@ invalid_stack_elem_kind:
 select_error:
 	cleanup();
 	return CSVTMT_ERROR;	
-update_error:
-	cleanup();
-	return CSVTMT_ERROR;	
 insert_error:
-	cleanup();
-	return CSVTMT_ERROR;	
-delete_error:
 	cleanup();
 	return CSVTMT_ERROR;	
 array_overflow:
 	csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "array overflow");
 	cleanup();
 	return CSVTMT_ERROR;
+invalid_elem_kind:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid stack element kind");
+	cleanup();
+	return CSVTMT_ERROR;
 invalid_op_kind:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid op kind %d", op_kind);
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid op kind");
 	cleanup();
 	return CSVTMT_ERROR;
 }

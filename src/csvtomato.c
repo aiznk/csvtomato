@@ -303,7 +303,7 @@ CsvTomatoResult
 csvtmt_step(CsvTomatoStmt *stmt, CsvTomatoError *error) {
 	CsvTomatoResult result;
 
-	csvtmt_csvline_final(&stmt->model.row);
+	csvtmt_row_final(&stmt->model.row);
 	memset(&stmt->model.row, 0, sizeof(stmt->model.row));
 
 	result = csvtmt_executor_exec(

@@ -1,8 +1,5 @@
 #pragma once
 
-#include "src/stringtmpl.h"
-DECL_STRING(CsvTomatoString, csvtmt_str, char)
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -54,6 +51,7 @@ enum {
 	CSVTMT_CSV_COLS_SIZE = 128,
 	CSVTMT_EXEC_STACK_SIZE = 256,
 	CSVTMT_ASSIGNS_ARRAY_SIZE = 128,
+	CSVTMT_NUM_STR_SIZE = 1024,
 };
 
 typedef enum {
@@ -65,6 +63,7 @@ typedef enum {
 	CSVTMT_ERR_EXEC,
 	CSVTMT_ERR_FILE_IO,
 	CSVTMT_ERR_INDEX_OUT_OF_RANGE,
+	CSVTMT_ERR_PARSE,
 } CsvTomatoErrorKind;
 
 typedef enum {
@@ -202,8 +201,8 @@ typedef struct CsvTomatoExecutor CsvTomatoExecutor;
 struct CsvTomatoStringList;
 typedef struct CsvTomatoStringList CsvTomatoStringList;
 
-struct CsvTomatoCsvLine;
-typedef struct CsvTomatoCsvLine CsvTomatoCsvLine;
+struct CsvTomatoRow;
+typedef struct CsvTomatoRow CsvTomatoRow;
 
 struct CsvTomatoColumnType;
 typedef struct CsvTomatoColumnType CsvTomatoColumnType;
@@ -228,6 +227,25 @@ typedef struct CsvTomatoStackElem CsvTomatoStackElem;
 
 struct CsvTomatoKeyValue;
 typedef struct CsvTomatoKeyValue CsvTomatoKeyValue;
+
+struct CsvTomatoColumnInfo;
+typedef struct CsvTomatoColumnInfo CsvTomatoColumnInfo;
+
+struct CsvTomatoColumnInfoArray;
+typedef struct CsvTomatoColumnInfoArray CsvTomatoColumnInfoArray;
+
+struct CsvTomatoRowArray;
+typedef struct CsvTomatoRowArray CsvTomatoRowArray;
+
+/************
+* templates *
+************/
+
+#include "src/stringtmpl.h"
+DECL_STRING(CsvTomatoString, csvtmt_str, char)
+
+#include "src/arraytmpl.h"
+DECL_ARRAY(CsvTomatoRows, csvtmt_rows, CsvTomatoRow)
 
 /**********
 * structs *
@@ -398,6 +416,7 @@ typedef enum {
 	CSVTMT_STACK_ELEM_STRING_VALUE,
 	CSVTMT_STACK_ELEM_INT_VALUE,
 	CSVTMT_STACK_ELEM_DOUBLE_VALUE,
+	CSVTMT_STACK_ELEM_BOOL_VALUE,
 	CSVTMT_STACK_ELEM_IDENT,
 	CSVTMT_STACK_ELEM_STAR,
 	CSVTMT_STACK_ELEM_KEY_VALUE,
@@ -422,6 +441,17 @@ struct CsvTomatoValue {
 	const char *string_value;
 };
 
+struct CsvTomatoColumnInfo {
+	const char *key;
+	size_t index;
+	CsvTomatoValue value;
+};
+
+struct CsvTomatoColumnInfoArray {
+	CsvTomatoColumnInfo array[100];
+	size_t len;
+};
+
 struct CsvTomatoStackElem {
 	CsvTomatoStackElemKind kind;
 	union {
@@ -434,6 +464,9 @@ struct CsvTomatoStackElem {
 		struct {
 			double value;
 		} double_value;
+		struct {
+			bool value;
+		} bool_value;
 		struct {
 			const char *value;
 		} ident;
@@ -453,8 +486,13 @@ struct CsvTomatoExecutor {
 	int a;
 };
 
-struct CsvTomatoCsvLine {
+struct CsvTomatoRow {
 	char *columns[CSVTMT_CSV_COLS_SIZE];
+	size_t len;
+};
+
+struct CsvTomatoRowArray {
+	CsvTomatoRow array[100];
 	size_t len;
 };
 
@@ -484,9 +522,17 @@ struct CsvTomatoHeader {
 	size_t types_len;
 };
 
+typedef enum {
+	CSVTMT_MODE_FIRST,
+	CSVTMT_MODE_WHERE,
+	CSVTMT_MODE_UPDATE_SET,
+} CsvTomatoMode;
+
 struct CsvTomatoModel {
 	char db_dir[CSVTMT_PATH_SIZE];
+	bool skip;
 	size_t opcodes_index;
+	size_t save_opcodes_index;
 	CsvTomatoStackElem stack[CSVTMT_EXEC_STACK_SIZE];
 	size_t stack_len;
 	const char *table_name;
@@ -500,9 +546,8 @@ struct CsvTomatoModel {
 	CsvTomatoHeader header;
 	CsvTomatoKeyValue update_set_key_values[CSVTMT_ASSIGNS_ARRAY_SIZE];
 	size_t update_set_key_values_len;
-	CsvTomatoKeyValue where_key_values[CSVTMT_ASSIGNS_ARRAY_SIZE];
-	size_t where_key_values_len;
-	CsvTomatoCsvLine row;
+	CsvTomatoRow row;
+	CsvTomatoRows *rows;
 	const char *selected_columns[CSVTMT_COLUMN_NAMES_ARRAY_SIZE];
 	size_t selected_columns_len;
 	struct {
@@ -511,6 +556,9 @@ struct CsvTomatoModel {
 		int fd;
 		size_t size;
 	} mmap;
+	FILE *fp;
+	char *row_head;
+	CsvTomatoMode mode;
 };
 
 struct CsvTomato {
@@ -767,40 +815,40 @@ csvtmt_strlist_move_back_str(
 // csv.c
 
 void
-csvtmt_csvline_show(CsvTomatoCsvLine *self);
+csvtmt_row_show(CsvTomatoRow *self);
 
 void
-csvtmt_csvline_set_clone(
-	CsvTomatoCsvLine *self,
+csvtmt_row_set_clone(
+	CsvTomatoRow *self,
 	size_t index,
 	const char *col,
 	CsvTomatoError *error
 );
 
 int
-csvtmt_csvline_parse_stream(
-	CsvTomatoCsvLine *self,
+csvtmt_row_parse_stream(
+	CsvTomatoRow *self,
 	FILE *fp,
 	CsvTomatoError *error
 );
 
 const char *
-csvtmt_csvline_parse_string(
-	CsvTomatoCsvLine *self,
+csvtmt_row_parse_string(
+	CsvTomatoRow *self,
 	const char *str,
 	CsvTomatoError *error
 );
 
 void
-csvtmt_csvline_append_to_stream(
-	CsvTomatoCsvLine *self,
+csvtmt_row_append_to_stream(
+	CsvTomatoRow *self,
 	FILE *fp,
 	bool wrap,
 	CsvTomatoError *error
 );
 
 void
-csvtmt_csvline_final(CsvTomatoCsvLine *self);
+csvtmt_row_final(CsvTomatoRow *self);
 
 // models.c
 
@@ -822,3 +870,80 @@ csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error);
 CsvTomatoResult
 csvtmt_delete(CsvTomatoModel *model, CsvTomatoError *error);
 
+void
+csvtmt_header_read_from_table(CsvTomatoHeader *self, const char *table_path, CsvTomatoError *error);
+
+void
+csvtmt_header_read_from_stream(CsvTomatoHeader *self, FILE *fp, CsvTomatoError *error);
+
+const char *
+csvtmt_header_read_from_string(CsvTomatoHeader *self, const char *p, CsvTomatoError *error);
+
+void
+csvtmt_open_mmap_for_read(
+	CsvTomatoModel *model,
+	const char *table_path,
+	CsvTomatoError *error
+);
+
+void
+csvtmt_open_mmap(
+	CsvTomatoModel *model,
+	const char *table_path,
+	int fd_mode,
+	int mmap_mode,
+	CsvTomatoError *error
+);
+
+void
+csvtmt_open_mmap_for_read_write(
+	CsvTomatoModel *model,
+	const char *table_path,
+	CsvTomatoError *error
+);
+
+void
+csvtmt_close_mmap(CsvTomatoModel *model);
+
+void
+csvtmt_parse_row_from_mmap(CsvTomatoModel *model, CsvTomatoError *error);
+
+int
+csvtmt_find_type_index(CsvTomatoModel *model, const char *type_name);
+
+void
+csvtmt_delete_row_head(CsvTomatoModel *model);
+
+void
+csvtmt_append_rows_to_table(
+	const char *table_path,
+	CsvTomatoRows *rows,
+	bool wrap,
+	CsvTomatoError *error
+);
+
+void
+csvtmt_clear_rows(CsvTomatoRows *rows);
+
+void
+csvtmt_store_column_infos(
+	CsvTomatoModel *model,
+	CsvTomatoColumnInfoArray *infos,
+	CsvTomatoKeyValue *kvs,
+	size_t kvs_len,
+	CsvTomatoError *error
+);
+
+void
+csvtmt_replace_row(
+	CsvTomatoModel *model,
+	CsvTomatoRow *row,
+	CsvTomatoColumnInfoArray *infos, 
+	CsvTomatoError *error
+);
+
+int
+csvtmt_update_all(CsvTomatoModel *model, CsvTomatoError *error);
+
+bool
+csvtmt_is_deleted_row(const CsvTomatoRow *row);

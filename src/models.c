@@ -1,30 +1,5 @@
 #include <csvtomato.h>
 
-typedef struct {
-	const char *key;
-	size_t index;
-	CsvTomatoValue value;
-} ColumnInfo;
-
-typedef struct {
-	ColumnInfo array[100];
-	size_t len;
-} ColumnInfoArray;
-
-typedef struct {
-	CsvTomatoCsvLine array[100];
-	size_t len;
-} CsvLineArray;
-
-static void
-store_colinfo(
-	CsvTomatoModel *model,
-	ColumnInfoArray *infos,
-	CsvTomatoKeyValue *kvs,
-	size_t kvs_len,
-	CsvTomatoError *error
-);
-
 static char *
 value_to_column(
 	const CsvTomatoValue *self,
@@ -42,8 +17,8 @@ value_to_column(
 		self->array[self->len++] = elem;\
 	}\
 
-impl_static_array(colinfo_array, ColumnInfoArray, ColumnInfo)
-impl_static_array(csvline_array, CsvLineArray, CsvTomatoCsvLine)
+impl_static_array(csvtmt_column_info_array, CsvTomatoColumnInfoArray, CsvTomatoColumnInfo)
+impl_static_array(csvtmt_row_array, CsvTomatoRowArray, CsvTomatoRow)
 
 void
 csvtmt_model_init(
@@ -57,12 +32,20 @@ csvtmt_model_init(
 
 void
 csvtmt_model_final(CsvTomatoModel *self) {
-	csvtmt_csvline_final(&self->row);
+	csvtmt_row_final(&self->row);
 	if (self->mmap.fd) {
 		munmap(self->mmap.ptr, self->mmap.size);
 		close(self->mmap.fd);
 		self->mmap.ptr = self->mmap.cur = NULL;
 		self->mmap.fd = 0;
+	}
+	if (self->fp) {
+		fclose(self->fp);
+		self->fp = NULL;
+	}
+	if (self->rows) {
+		csvtmt_clear_rows(self->rows);
+		csvtmt_rows_del(self->rows);
 	}
 }
 
@@ -153,7 +136,73 @@ overflow:
 }
 
 static void
-header_read_from_table(CsvTomatoHeader *self, const char *table_path, CsvTomatoError *error) {
+header_parse_types(
+	CsvTomatoHeader *self,
+	CsvTomatoRow *row,
+	CsvTomatoError *error
+) {
+	self->types_len = 0;
+
+	for (size_t i = 0; i < row->len; i++) {
+		if (self->types_len >= csvtmt_numof(self->types)) {
+			csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "header types overflow");
+			return;
+		}
+		CsvTomatoColumnType *type = &self->types[self->types_len++];
+		type_parse_column(type, row->columns[i], i, error);
+		if (error->error) {
+			csvtmt_error_format(error, CSVTMT_ERR_PARSE, "failed to parse header column");
+			return;
+		}
+	}
+}
+
+const char *
+csvtmt_header_read_from_string(CsvTomatoHeader *self, const char *p, CsvTomatoError *error) {
+	CsvTomatoRow row = {0};
+	p = csvtmt_row_parse_string(&row, p, error);
+	if (error->error) {
+		return NULL;
+	}
+
+	header_parse_types(self, &row, error);
+	if (error->error) {
+		goto failed_to_parse_types;
+	}
+
+	csvtmt_row_final(&row);
+	return p;
+
+failed_to_parse_types:
+	csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "failed to header types");
+	return NULL;
+}
+
+void
+csvtmt_header_read_from_stream(CsvTomatoHeader *self, FILE *fp, CsvTomatoError *error) {
+	CsvTomatoRow row = {0};
+
+	csvtmt_row_parse_stream(&row, fp, error);
+	if (error->error) {
+		fclose(fp);
+		return;
+	}
+	fclose(fp);
+
+	header_parse_types(self, &row, error);
+	if (error->error) {
+		goto failed_to_parse_types;
+	}
+
+	csvtmt_row_final(&row);
+	return;
+failed_to_parse_types:
+	csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "failed to header types");
+	return;
+}
+
+void
+csvtmt_header_read_from_table(CsvTomatoHeader *self, const char *table_path, CsvTomatoError *error) {
 	errno = 0;
 	FILE *fp = fopen(table_path, "r");
 	if (!fp) {
@@ -161,33 +210,23 @@ header_read_from_table(CsvTomatoHeader *self, const char *table_path, CsvTomatoE
 		return;
 	}
 
-	CsvTomatoCsvLine row = {0};
-	csvtmt_csvline_parse_stream(&row, fp, error);
+	CsvTomatoRow row = {0};
+	csvtmt_row_parse_stream(&row, fp, error);
 	if (error->error) {
 		fclose(fp);
 		return;
 	}
 	fclose(fp);
 
-	self->types_len = 0;
-
-	for (size_t i = 0; i < row.len; i++) {
-		if (self->types_len >= csvtmt_numof(self->types)) {
-			goto types_overflow;
-		}
-		CsvTomatoColumnType *type = &self->types[self->types_len++];
-		type->index = i;
-		type_parse_column(type, row.columns[i], i, error);
-		if (error->error) {
-			return;	
-		}
-		// printf("type: index[%ld] type_name[%s] type_def[%s]\n", type->index, type->type_name, type->type_def);
+	header_parse_types(self, &row, error);
+	if (error->error) {
+		goto failed_to_parse_types;
 	}
 
-	csvtmt_csvline_final(&row);
+	csvtmt_row_final(&row);
 	return;
-types_overflow:
-	csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "header types overflow");
+failed_to_parse_types:
+	csvtmt_error_format(error, CSVTMT_ERR_BUF_OVERFLOW, "failed to header types");
 	return;
 }
 
@@ -289,6 +328,15 @@ gen_auto_increment_id(
 failed_to_open_file:
 	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to open id file: %s", strerror(errno));
 	return 0;
+}
+
+void
+csvtmt_parse_row_from_mmap(CsvTomatoModel *model, CsvTomatoError *error) {
+	memset(&model->row, 0, sizeof(model->row));
+	model->mmap.cur = (char *) csvtmt_row_parse_string(&model->row, model->mmap.cur, error);
+	if (error->error) {
+		return;
+	}
 }
 
 void
@@ -454,38 +502,6 @@ value_eq(const CsvTomatoValue *lhs, const CsvTomatoValue *rhs) {
 }
 
 static void
-append_csv_lines(
-	CsvTomatoModel *model,
-	CsvLineArray *lines,
-	bool wrap,
-	CsvTomatoError *error
-) {
-	errno = 0;
-	FILE *fp = fopen(model->table_path, "a");
-	if (!fp) {
-		goto failed_to_open_table;
-	}
-
-	for (size_t i = 0; i < lines->len; i++) {
-		CsvTomatoCsvLine *line = &lines->array[i];
-		csvtmt_csvline_append_to_stream(line, fp, wrap, error);
-		if (error->error) {
-			goto failed_to_append;
-		}	
-	}
-
-	fclose(fp);
-	return;
-failed_to_append:
-	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to append lines to stream");
-	fclose(fp);
-	return;
-failed_to_open_table:
-	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to open table: %s: %s", model->table_path, strerror(errno));
-	return;
-}
-
-static void
 mkdir_tmp_dir(const char *db_dir, char *tmp_dir, size_t tmp_dir_size) {
 	snprintf(tmp_dir, tmp_dir_size, "%s/tmp", db_dir);
 	if (!csvtmt_file_exists(tmp_dir)) {
@@ -493,12 +509,12 @@ mkdir_tmp_dir(const char *db_dir, char *tmp_dir, size_t tmp_dir_size) {
 	}
 }
 
-static int
-update_all(CsvTomatoModel *model, CsvTomatoError *error) {
+int
+csvtmt_update_all(CsvTomatoModel *model, CsvTomatoError *error) {
 	FILE *fin, *fout;
-	ColumnInfoArray infos = {0};
+	CsvTomatoColumnInfoArray infos = {0};
 
-	store_colinfo(model, &infos, model->update_set_key_values, model->update_set_key_values_len, error);
+	csvtmt_store_column_infos(model, &infos, model->update_set_key_values, model->update_set_key_values_len, error);
 	if (error->error) {
 		return CSVTMT_ERROR;
 	}
@@ -520,12 +536,12 @@ update_all(CsvTomatoModel *model, CsvTomatoError *error) {
 		goto failed_to_open_tmp_file;
 	}
 
-	CsvTomatoCsvLine row = {0};
+	CsvTomatoRow row = {0};
 	size_t nline = 0;
 
 	for (;; nline++) {
-		csvtmt_csvline_final(&row);
-		int ret = csvtmt_csvline_parse_stream(&row, fin, error);
+		csvtmt_row_final(&row);
+		int ret = csvtmt_row_parse_stream(&row, fin, error);
 		if (error->error) {
 			goto failed_to_parse_stream;
 		}
@@ -533,14 +549,14 @@ update_all(CsvTomatoModel *model, CsvTomatoError *error) {
 			break;
 		}
 
-		// csvtmt_csvline_show(&row);
+		// csvtmt_row_show(&row);
 		if (row.len && !strcmp(row.columns[0], "1")) {
 			continue; // this row deleted
 		}
 
 		if (nline != 0) {
 			for (size_t ii = 0; ii < infos.len; ii++) {
-				ColumnInfo *info = &infos.array[ii];
+				CsvTomatoColumnInfo *info = &infos.array[ii];
 
 				for (size_t ci = 0; ci < row.len; ci++) {
 					if (info->index == ci) {
@@ -548,7 +564,7 @@ update_all(CsvTomatoModel *model, CsvTomatoError *error) {
 						if (error->error) {
 							goto failed_to_value_to_string;
 						}
-						csvtmt_csvline_set_clone(&row, info->index, s, error);
+						csvtmt_row_set_clone(&row, info->index, s, error);
 						free(s);
 						if (error->error) {
 							goto failed_to_replace;
@@ -558,12 +574,12 @@ update_all(CsvTomatoModel *model, CsvTomatoError *error) {
 			}
 		}
 
-		csvtmt_csvline_append_to_stream(&row, fout, true, error);
+		csvtmt_row_append_to_stream(&row, fout, true, error);
 		if (error->error) {
 			goto failed_to_append_to_stream;
 		}
 
-		csvtmt_csvline_final(&row);
+		csvtmt_row_final(&row);
 	}
 
 	if (csvtmt_file_rename(tmp_path, model->table_path) == -1) {
@@ -604,10 +620,10 @@ failed_to_replace:
 	return CSVTMT_ERROR;
 }
 
-static void
-store_colinfo(
+void
+csvtmt_store_column_infos(
 	CsvTomatoModel *model,
-	ColumnInfoArray *infos,
+	CsvTomatoColumnInfoArray *infos,
 	CsvTomatoKeyValue *kvs,
 	size_t kvs_len,
 	CsvTomatoError *error
@@ -623,12 +639,12 @@ store_colinfo(
 		for (size_t kvi = 0; kvi < kvs_len; kvi++) {
 			CsvTomatoKeyValue *kv = &kvs[kvi];
 			if (!strcmp(type->type_name, kv->key)) {
-				ColumnInfo info = {
+				CsvTomatoColumnInfo info = {
 					.key = type->type_name,
 					.index = ti,
 					.value = kv->value,
 				};
-				colinfo_array_push(infos, info, error);
+				csvtmt_column_info_array_push(infos, info, error);
 				if (error->error) {
 					goto array_overflow;
 				}
@@ -644,7 +660,7 @@ array_overflow:
 }
 
 static void
-store_selected_columns(CsvTomatoModel *model, CsvTomatoCsvLine *row, CsvTomatoError *error) {
+store_selected_columns(CsvTomatoModel *model, CsvTomatoRow *row, CsvTomatoError *error) {
 	CsvTomatoColumnType *types = model->header.types;
 	size_t tlen = model->header.types_len;
 	const char **cols = model->column_names;
@@ -684,28 +700,28 @@ store_selected_columns(CsvTomatoModel *model, CsvTomatoCsvLine *row, CsvTomatoEr
 	}
 }
 
-static void
-replace_row(
+void
+csvtmt_replace_row(
 	CsvTomatoModel *model,
-	CsvTomatoCsvLine *row,
-	ColumnInfoArray *infos, 
+	CsvTomatoRow *row,
+	CsvTomatoColumnInfoArray *infos, 
 	CsvTomatoError *error
 ) {
 	for (size_t i = 0; i < infos->len; i++) {
-		ColumnInfo *info = &infos->array[i];
+		CsvTomatoColumnInfo *info = &infos->array[i];
 		char *s = value_to_column(&info->value, true, error);
 		if (error->error) {
 			return;
 		}
-		csvtmt_csvline_set_clone(row, info->index, s, error);
+		csvtmt_row_set_clone(row, info->index, s, error);
 		free(s);
 	}
 }
-
-static ColumnInfo *
-where_match(ColumnInfoArray *where_infos, CsvTomatoCsvLine *row) {
+/*
+static CsvTomatoColumnInfo *
+where_match(CsvTomatoColumnInfoArray *where_infos, CsvTomatoRow *row) {
 	for (size_t ii = 0; ii < where_infos->len; ii++) {
-		ColumnInfo *winfo = &where_infos->array[ii];
+		CsvTomatoColumnInfo *winfo = &where_infos->array[ii];
 
 		for (size_t ci = 0; ci < row->len; ci++) {
 			const char *col = row->columns[ci];
@@ -719,77 +735,106 @@ where_match(ColumnInfoArray *where_infos, CsvTomatoCsvLine *row) {
 	}	
 	return NULL;
 }
+*/
+void
+csvtmt_open_mmap(
+	CsvTomatoModel *model,
+	const char *table_path,
+	int fd_mode,
+	int mmap_mode,
+	CsvTomatoError *error
+) {
+	errno = 0;
+	model->mmap.fd = open(table_path, fd_mode);
+	if (model->mmap.fd == -1) {
+		goto failed_to_open_table;
+	}
+
+	struct stat st;
+	errno = 0;
+	if (fstat(model->mmap.fd, &st) == -1) {
+		close(model->mmap.fd);
+		goto failed_to_stat;
+	}
+
+	model->mmap.size = st.st_size;
+
+	model->mmap.ptr = mmap(NULL, model->mmap.size, mmap_mode, MAP_SHARED, model->mmap.fd, 0);
+	if (model->mmap.ptr == MAP_FAILED) {
+		close(model->mmap.fd);
+		goto failed_to_mmap;
+	}
+
+	model->mmap.cur = model->mmap.ptr;
+
+	return;
+failed_to_open_table:
+	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to open table");
+	return;
+failed_to_stat:
+	csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to stat");
+	return;
+failed_to_mmap:
+	csvtmt_error_format(error, CSVTMT_ERR_MEM, "faled to mmap");
+	return;
+}
+
+void
+csvtmt_open_mmap_for_read(
+	CsvTomatoModel *model,
+	const char *table_path,
+	CsvTomatoError *error
+) {
+	csvtmt_open_mmap(model, table_path, O_RDONLY, PROT_READ, error);
+}
+
+void
+csvtmt_open_mmap_for_read_write(
+	CsvTomatoModel *model,
+	const char *table_path,
+	CsvTomatoError *error
+) {
+	csvtmt_open_mmap(model, table_path, O_RDWR, PROT_READ | PROT_WRITE, error);
+}
+
+void
+csvtmt_close_mmap(CsvTomatoModel *model) {
+	munmap(model->mmap.ptr, model->mmap.size);
+	close(model->mmap.fd);
+	model->mmap.ptr = NULL;
+	model->mmap.fd = 0;
+}
 
 CsvTomatoResult
 csvtmt_delete(CsvTomatoModel *model, CsvTomatoError *error) {
+	/*
 	bool has_where = model->where_key_values_len;
-	CsvTomatoCsvLine row = {0};
+	CsvTomatoRow row = {0};
 	
-	header_read_from_table(&model->header, model->table_path, error);
-	if (error->error) {
-		goto failed_to_header_read;
-	}
-
-	char *ptr;
-	int fd;
-	size_t size;
-
-	{ // Linux
-		errno = 0;
-		fd = open(model->table_path, O_RDWR);
-		if (fd == -1) {
-			goto failed_to_open_table;
-		}
-
-		struct stat st;
-		errno = 0;
-		if (fstat(fd, &st) == -1) {
-			close(fd);
-			goto failed_to_stat;
-		}
-
-		size = st.st_size;
-
-		ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-		if (ptr == MAP_FAILED) {
-			goto failed_to_mmap;
-		}
-	}
-
 	if (has_where) {
 		// DELETEではWHEREにマッチする行は論理削除を行う。
-		ColumnInfoArray where_infos = {0};
+		CsvTomatoColumnInfoArray where_infos = {0};
 
-		store_colinfo(model, &where_infos, model->where_key_values, model->where_key_values_len, error);
+		csvtmt_store_column_infos(model, &where_infos, model->where_key_values, model->where_key_values_len, error);
 		if (error->error) {
 			goto array_overflow;
 		}
 
-		CsvTomatoCsvLine row = {0};
-		char *p = ptr;
+		CsvTomatoRow row = {0};
+		char *p = model->mmap.cur;
 
-		// skip first line (header)
-		p = (char *) csvtmt_csvline_parse_string(&row, p, error);
-		if (error->error) {
-			goto failed_to_parse_csv;
-		}
-		csvtmt_csvline_final(&row);
-
-		// CSVファイルを走査して、indicesの列の値がkvsのvalueと
-		// 一致しているか見る。一致していればWHEREにマッチしている行と見なす。
-		// WHERE value1 = 123
 		for (; *p; ) {
 			char *head = p;
-			p = (char *) csvtmt_csvline_parse_string(&row, p, error);
+			p = (char *) csvtmt_row_parse_string(&row, p, error);
 			if (error->error) {
 				goto failed_to_parse_csv;
 			}
 			if (!strcmp(row.columns[0], "1")) {
-				csvtmt_csvline_final(&row);
+				csvtmt_row_final(&row);
 				continue; // this line deleted
 			}
 
-			ColumnInfo *winfo = where_match(&where_infos, &row);
+			CsvTomatoColumnInfo *winfo = where_match(&where_infos, &row);
 			if (winfo) {
 				// match
 				if (*head == '"') {
@@ -799,32 +844,23 @@ csvtmt_delete(CsvTomatoModel *model, CsvTomatoError *error) {
 				*head = '1';
 			}
 
-			csvtmt_csvline_final(&row);
+			csvtmt_row_final(&row);
 		}
 
+		model->mmap.cur = p;
 
 	} else {
 		// 全論理削除。
-		char *p = ptr;
+		char *p = model->mmap.cur;
 
-		// skip first line (header)
-		p = (char *) csvtmt_csvline_parse_string(&row, p, error);
-		if (error->error) {
-			goto failed_to_parse_csv;
-		}
-		csvtmt_csvline_final(&row);
-
-		// CSVファイルを走査して、indicesの列の値がkvsのvalueと
-		// 一致しているか見る。一致していればWHEREにマッチしている行と見なす。
-		// WHERE value1 = 123
 		for (; *p; ) {
 			char *head = p;
-			p = (char *) csvtmt_csvline_parse_string(&row, p, error);
+			p = (char *) csvtmt_row_parse_string(&row, p, error);
 			if (error->error) {
 				goto failed_to_parse_csv;
 			}
 			if (!strcmp(row.columns[0], "1")) {
-				csvtmt_csvline_final(&row);
+				csvtmt_row_final(&row);
 				continue; // this line deleted
 			}
 			if (*head == '"') {
@@ -833,46 +869,28 @@ csvtmt_delete(CsvTomatoModel *model, CsvTomatoError *error) {
 			// __MODE__ column to 1 (delete)
 			*head = '1';
 
-			csvtmt_csvline_final(&row);
+			csvtmt_row_final(&row);
 		}
-	}
 
-	{ // Linux
-		munmap(ptr, size);
-		close(fd);
+		model->mmap.cur = p;
 	}
 
 	return CSVTMT_DONE;
-failed_to_header_read:
-	return CSVTMT_ERROR;
 failed_to_parse_csv:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to parse csv line");
 	return CSVTMT_ERROR;
 array_overflow:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "array overflow");
 	return CSVTMT_ERROR;
-failed_to_stat:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to get table size: %s", strerror(errno));
-	return CSVTMT_ERROR;
-failed_to_mmap:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to mmap. %s", strerror(errno));
-	return CSVTMT_ERROR;
-failed_to_open_table:
-	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to open table %s. %s", model->table_path, strerror(errno));
-	return CSVTMT_ERROR;
+	*/
+	return 0;
 }
 
 CsvTomatoResult
 csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error) {
+	/*
 	const char *not_found = NULL;
-	bool has_where = model->where_key_values_len;
 	
-	header_read_from_table(&model->header, model->table_path, error);
-	if (error->error) {
-		goto failed_to_header_read;
-	
-	}
-
 	not_found = header_has_key_values_types(
 		&model->header,
 		model->update_set_key_values,
@@ -885,79 +903,23 @@ csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error) {
 
 	if (has_where) {
 		// WHEREのあるUPDATEでは該当行の論理削除と該当行をコピーしてファイルへの追記を行う。
-		
-		// UPDATE table 
-		// 		SET age = 21, name = "hoge"
-		// 		WHERE age = 20
-
-		// SETのageとnameは順不同。
-		// ヘッダのカラムからageとnameの列インデックスを得る必要がある。
-
-		char *ptr;
-		int fd;
-		size_t size;
-
-		{ // Linux
-			errno = 0;
-			fd = open(model->table_path, O_RDWR);
-			if (fd == -1) {
-				goto failed_to_open_table;
-			}
-
-			struct stat st;
-			errno = 0;
-			if (fstat(fd, &st) == -1) {
-				close(fd);
-				goto failed_to_stat;
-			}
-
-			size = st.st_size;
-
-			ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-			if (ptr == MAP_FAILED) {
-				goto failed_to_mmap;
-			}
-		}
-
-		ColumnInfoArray where_infos = {0};
-		ColumnInfoArray set_infos = {0};
-
-		store_colinfo(model, &where_infos, model->where_key_values, model->where_key_values_len, error);
-		if (error->error) {
-			goto array_overflow;
-		}
-		store_colinfo(model, &set_infos, model->update_set_key_values, model->update_set_key_values_len, error);
-		if (error->error) {
-			goto array_overflow;
-		}
-
-		CsvTomatoCsvLine row = {0};
-		CsvLineArray lines = {0};
-		char *p = ptr;
-
-		// skip first line (header)
-		p = (char *) csvtmt_csvline_parse_string(&row, p, error);
-		if (error->error) {
-			goto failed_to_parse_csv;
-		}
-		csvtmt_csvline_final(&row);
 
 		// CSVファイルを走査して、indicesの列の値がkvsのvalueと
 		// 一致しているか見る。一致していればWHEREにマッチしている行と見なす。
 		// WHERE value1 = 123
 		for (; *p; ) {
 			char *head = p;
-			p = (char *) csvtmt_csvline_parse_string(&row, p, error);
+			p = (char *) csvtmt_row_parse_string(&row, p, error);
 			if (error->error) {
 				goto failed_to_parse_csv;
 			}
 			if (!strcmp(row.columns[0], "1")) {
-				csvtmt_csvline_final(&row);
+				csvtmt_row_final(&row);
 				continue; // this line deleted
 			}
 
 			for (size_t ii = 0; ii < where_infos.len; ii++) {
-				ColumnInfo *winfo = &where_infos.array[ii];
+				CsvTomatoColumnInfo *winfo = &where_infos.array[ii];
 
 				for (size_t ci = 0; ci < row.len; ci++) {
 					const char *col = row.columns[ci];
@@ -968,8 +930,8 @@ csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error) {
 							// printf("match: %s\n", col);
 
 							// replace
-							replace_row(model, &row, &set_infos, error);
-							csvline_array_push(&lines, row, error);
+							csvtmt_replace_row(model, &row, &set_infos, error);
+							row_array_push(&lines, row, error);
 							if (error->error) {
 								goto array_overflow;
 							}
@@ -986,7 +948,7 @@ csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error) {
 				}
 			}
 
-			csvtmt_csvline_final(&row);
+			csvtmt_row_final(&row);
 		}
 
 		append_csv_lines(model, &lines, false, error);
@@ -995,19 +957,12 @@ csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error) {
 		}
 
 		for (size_t i = 0; i < lines.len; i++) {
-			csvtmt_csvline_final(&lines.array[i]);
+			csvtmt_row_final(&lines.array[i]);
 		}
 
 		{ // Linux
 			munmap(ptr, size);
 			close(fd);
-		}
-	} else {
-		// UPDATE table SET age = 123, name = "Taro"
-		// WHERE句がない。全置換。
-		update_all(model, error);
-		if (error->error) {
-			goto failed_to_replace_update;
 		}
 	}
 
@@ -1039,17 +994,20 @@ array_overflow:
 failed_to_append_lines:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to append csv lines");
 	return CSVTMT_ERROR;
+	*/
+	return 0;
 }
 
 CsvTomatoResult
 csvtmt_select(CsvTomatoModel *model, CsvTomatoError *error) {
+	/*
 	// SELECTではmmapを使って走査する。
 	const char *not_found = NULL;
-	CsvTomatoCsvLine row = {0};
+	CsvTomatoRow row = {0};
 	bool has_where = model->where_key_values_len;
 
 	if (model->mmap.fd == 0) {
-		header_read_from_table(&model->header, model->table_path, error);
+		csvtmt_header_read_from_table(&model->header, model->table_path, error);
 		if (error->error) {
 			goto failed_to_header_read;
 		}
@@ -1100,34 +1058,34 @@ csvtmt_select(CsvTomatoModel *model, CsvTomatoError *error) {
 		}
 
 		// skip first line (header)
-		model->mmap.cur = (char *) csvtmt_csvline_parse_string(&row, model->mmap.cur, error);
+		model->mmap.cur = (char *) csvtmt_row_parse_string(&row, model->mmap.cur, error);
 		if (error->error) {
 			goto failed_to_parse_csv;
 		}
-		csvtmt_csvline_final(&row);
+		csvtmt_row_final(&row);
 	}
 
 	// fdが0じゃない場合は（すでにファイルを開いている場合は）
 	// 途中から続行する。
 
 	if (has_where) {
-		ColumnInfoArray where_infos = {0};
-		store_colinfo(model, &where_infos, model->where_key_values, model->where_key_values_len, error);
+		CsvTomatoColumnInfoArray where_infos = {0};
+		csvtmt_store_column_infos(model, &where_infos, model->where_key_values, model->where_key_values_len, error);
 		if (error->error) {
 			goto failed_to_store_colinfo;
 		}
 
 		for (; *model->mmap.cur; ) {
-			model->mmap.cur = (char *) csvtmt_csvline_parse_string(&row, model->mmap.cur, error);
+			model->mmap.cur = (char *) csvtmt_row_parse_string(&row, model->mmap.cur, error);
 			if (error->error) {
 				goto failed_to_parse_csv;
 			}
 			if (!strcmp(row.columns[0], "1")) {
-				csvtmt_csvline_final(&row);
+				csvtmt_row_final(&row);
 				continue; // this line deleted
 			}
 
-			ColumnInfo *winfo = where_match(&where_infos, &row);
+			CsvTomatoColumnInfo *winfo = where_match(&where_infos, &row);
 			if (winfo) {
 				model->row = row;
 				store_selected_columns(model, &model->row, error);
@@ -1138,16 +1096,16 @@ csvtmt_select(CsvTomatoModel *model, CsvTomatoError *error) {
 				goto ret_row;
 			}
 
-			csvtmt_csvline_final(&row);
+			csvtmt_row_final(&row);
 		}
 	} else {
 		for (; *model->mmap.cur; ) {
-			model->mmap.cur = (char *) csvtmt_csvline_parse_string(&row, model->mmap.cur, error);
+			model->mmap.cur = (char *) csvtmt_row_parse_string(&row, model->mmap.cur, error);
 			if (error->error) {
 				goto failed_to_parse_csv;
 			}
 			if (!strcmp(row.columns[0], "1")) {
-				csvtmt_csvline_final(&row);
+				csvtmt_row_final(&row);
 				continue; // this line deleted
 			}
 
@@ -1198,6 +1156,8 @@ invalid_column:
 failed_to_open_table:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to open table %s. %s", model->table_path, strerror(errno));
 	return CSVTMT_ERROR;
+	*/
+	return 0;
 }
 
 CsvTomatoResult
@@ -1215,7 +1175,7 @@ csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error) {
 		csvtmt_str_del(buf);\
 	}\
 
-	header_read_from_table(&model->header, model->table_path, error);
+	csvtmt_header_read_from_table(&model->header, model->table_path, error);
 	if (error->error) {
 		goto failed_to_header_read;
 	}
@@ -1364,4 +1324,67 @@ values_index_out_of_ragen:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "values index out of range");
 	cleanup();
 	return CSVTMT_ERROR;
+}
+
+int
+csvtmt_find_type_index(CsvTomatoModel *model, const char *type_name) {
+	for (int i = 0; i < model->header.types_len; i++) {
+		const CsvTomatoColumnType *type = &model->header.types[i];
+		if (!strcmp(type->type_name, type_name)) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+void
+csvtmt_delete_row_head(CsvTomatoModel *model) {
+	char *p = model->row_head;
+	if (p) {
+		if (*p == '"') {
+			p++;
+		}
+		*p = '1';
+	}
+}
+
+void
+csvtmt_append_rows_to_table(
+	const char *table_path,
+	CsvTomatoRows *rows,
+	bool wrap,
+	CsvTomatoError *error
+) {
+	FILE *fp = fopen(table_path, "a");
+	if (!fp) {
+		csvtmt_error_format(error, CSVTMT_ERR_FILE_IO, "failed to open table: %s: %s", table_path, strerror(errno));
+		return;
+	}
+
+	for (size_t i = 0; i < rows->len; i++) {
+		CsvTomatoRow *row = &rows->array[i];
+		csvtmt_row_append_to_stream(row, fp, wrap, error);
+		if (error->error) {
+			goto failed_to_append;
+		}
+	}
+
+	fclose(fp);
+	return;
+failed_to_append:
+	fclose(fp);
+	return;
+}
+
+void
+csvtmt_clear_rows(CsvTomatoRows *rows) {
+	for (size_t i = 0; i < rows->len; i++) {
+		csvtmt_row_final(&rows->array[i]);
+	}
+	rows->len = 0;
+}
+
+bool
+csvtmt_is_deleted_row(const CsvTomatoRow *row) {
+	return !strcmp(row->columns[0], "1");
 }

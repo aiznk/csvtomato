@@ -4,11 +4,11 @@
 #include <stdlib.h>
 #include <stddef.h>
 
-#define DECL_STRING(NAME, NS, TYPE)\
+#define DECL_ARRAY(NAME, NS, TYPE)\
 	typedef struct {\
 		size_t capa;\
 		size_t len;\
-		TYPE *str;\
+		TYPE *array;\
 	} NAME;\
 	\
 	NAME *\
@@ -31,11 +31,9 @@
 	\
 	void\
 	NS ## _clear(NAME *self);\
-	\
-	NAME *\
-	NS ## _append(NAME *self, const TYPE *str);\
 
-#define DEF_STRING(NAME, NS, TYPE, NIL)\
+
+#define DEF_ARRAY(NAME, NS, TYPE, NIL)\
 	NAME *\
 	NS ## _new(void) {\
 		NAME *self = calloc(1, sizeof(*self));\
@@ -46,12 +44,12 @@
 		size_t byte = sizeof(TYPE);\
 		size_t capa = 4;\
 		size_t size = byte * capa + byte;\
-		self->str = malloc(size);\
-		if (!self->str) {\
+		self->array = malloc(size);\
+		if (!self->array) {\
 			free(self);\
 			return NULL;\
 		}\
-		self->str[0] = NIL;\
+		self->array[0] = NIL;\
 		self->capa = capa;\
 		\
 		return self;\
@@ -60,15 +58,15 @@
 	void\
 	NS ## _del(NAME *self) {\
 		if (self) {\
-			free(self->str);\
+			free(self->array);\
 			free(self);\
 		}\
 	}\
 	\
 	TYPE *\
 	NS ## _esc_del(NAME *self) {\
-		TYPE *str = self->str;\
-		self->str = NULL;\
+		TYPE *str = self->array;\
+		self->array = NULL;\
 		NS ## _del(self);\
 		return str;\
 	}\
@@ -77,27 +75,27 @@
 	NS ## _resize(NAME *self, size_t new_capa) {\
 		size_t byte = sizeof(TYPE);\
 		size_t size = byte * new_capa + byte;\
-		TYPE *tmp = realloc(self->str, size);\
+		TYPE *tmp = realloc(self->array, size);\
 		if (!tmp) {\
 			return NULL;\
 		}\
 		\
-		self->str = tmp;\
+		self->array = tmp;\
 		self->capa = new_capa;\
 		\
 		return self;\
 	}\
 	\
 	NAME *\
-	NS ## _push_back(NAME *self, TYPE ch) {\
+	NS ## _push_back(NAME *self, TYPE elem) {\
 		if (self->len >= self->capa) {\
 			if (!NS ## _resize(self, self->capa*2)) {\
 				return NULL;\
 			}\
 		}\
 		\
-		self->str[self->len++] = ch;\
-		self->str[self->len] = NIL;\
+		self->array[self->len++] = elem;\
+		self->array[self->len] = NIL;\
 		return self;\
 	}\
 	\
@@ -106,8 +104,8 @@
 		TYPE ret = NIL;\
 		if (self->len) {\
 			self->len--;\
-			ret = self->str[self->len];\
-			self->str[self->len] = NIL;\
+			ret = self->array[self->len];\
+			self->array[self->len] = NIL;\
 		}\
 		return ret;\
 	}\
@@ -115,15 +113,5 @@
 	void\
 	NS ## _clear(NAME *self) {\
 		self->len = 0;\
-	}\
-	\
-	NAME *\
-	NS ## _append(NAME *self, const TYPE *str) {\
-		for (const TYPE *p = str; *p; p++) {\
-			if (!NS ## _push_back(self, *p)) {\
-				return NULL;\
-			}\
-		}\
-		return self;\
 	}\
 

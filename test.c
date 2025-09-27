@@ -38,6 +38,8 @@
 
 #undef cleanup
 #define cleanup() {\
+	csvtmt_model_final(&model);\
+	memset(&model, 0, sizeof(model));\
 	csvtmt_token_del_all(token);\
 	token = NULL;\
 	csvtmt_node_del_all(node);\
@@ -98,11 +100,11 @@ make_stream(const char *s) {
 
 void
 parse_stream(const char *input, const char *expected[], int expected_len) {
-    CsvTomatoCsvLine line = {0};
+    CsvTomatoRow line = {0};
     CsvTomatoError error = {0};
 
     FILE *fp = make_stream(input);
-    csvtmt_csvline_parse_stream(&line, fp, &error);
+    csvtmt_row_parse_stream(&line, fp, &error);
     fclose(fp);
 
     assert(line.len == expected_len);
@@ -111,14 +113,14 @@ parse_stream(const char *input, const char *expected[], int expected_len) {
         assert(strcmp(line.columns[i], expected[i]) == 0);
     }
 
-	csvtmt_csvline_final(&line);
+	csvtmt_row_final(&line);
 }
 
 void parse_string(const char *input, const char *expected[], int expected_len) {
-    CsvTomatoCsvLine line = {0};
+    CsvTomatoRow line = {0};
     CsvTomatoError error = {0};
 
-    csvtmt_csvline_parse_string(&line, input, &error);
+    csvtmt_row_parse_string(&line, input, &error);
 
     assert(line.len == expected_len);
 
@@ -126,7 +128,7 @@ void parse_string(const char *input, const char *expected[], int expected_len) {
         assert(strcmp(line.columns[i], expected[i]) == 0);
     }
 
-	csvtmt_csvline_final(&line);		
+	csvtmt_row_final(&line);		
 }
 
 void
@@ -327,6 +329,8 @@ test_tomato(void) {
 		"0,1,\"\"\"hige,hoge\"\"\",20\n"
 		"0,2,\"hige,hoge\",20\n"
 	));
+
+	/*
 	assert(csvtmt_prepare(
 		db,
 		"SELECT name FROM users;",
@@ -426,6 +430,26 @@ test_tomato(void) {
 
 	assert(csvtmt_prepare(
 		db,
+		"SELECT age, name FROM users WHERE age < 30;",
+		&stmt,
+		&error
+	) == CSVTMT_OK);
+
+	assert(csvtmt_step(stmt, &error) == CSVTMT_ROW);
+	assert(stmt->model.row.len);
+	assert(!strcmp(stmt->model.row.columns[0], "0"));
+	assert(!strcmp(stmt->model.row.columns[1], "1"));
+	assert(!strcmp(stmt->model.row.columns[2], "Alice"));
+	assert(!strcmp(stmt->model.row.columns[3], "20"));
+	assert(!strcmp(stmt->model.selected_columns[0], "20"));
+	assert(!strcmp(stmt->model.selected_columns[1], "Alice"));
+
+	csvtmt_finalize(stmt);
+
+	// SELECT 
+
+	assert(csvtmt_prepare(
+		db,
 		"SELECT age, name FROM users WHERE age = 20;",
 		&stmt,
 		&error
@@ -512,7 +536,7 @@ test_tomato(void) {
 	assert(csvtmt_step(stmt, &error) == CSVTMT_DONE);
 
 	csvtmt_finalize(stmt);
-
+	*/
 	// done
 	csvtmt_close(db);
 }

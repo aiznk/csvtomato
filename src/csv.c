@@ -1,7 +1,7 @@
 #include <csvtomato.h>
 
 void
-csvtmt_csvline_show(CsvTomatoCsvLine *self) {
+csvtmt_row_show(CsvTomatoRow *self) {
 	for (size_t i = 0; i < self->len; i++) {
 		printf("[%s]", self->columns[i]);
 	}
@@ -9,8 +9,8 @@ csvtmt_csvline_show(CsvTomatoCsvLine *self) {
 }
 
 const char *
-csvtmt_csvline_parse_string(
-	CsvTomatoCsvLine *self,
+csvtmt_row_parse_string(
+	CsvTomatoRow *self,
 	const char *str,
 	CsvTomatoError *error
 ) {
@@ -143,8 +143,8 @@ fail:
 }
 
 int
-csvtmt_csvline_parse_stream(
-	CsvTomatoCsvLine *self,
+csvtmt_row_parse_stream(
+	CsvTomatoRow *self,
 	FILE *fp,
 	CsvTomatoError *error
 ) {
@@ -281,12 +281,12 @@ fail:
 }
 
 void
-csvtmt_csvline_final(CsvTomatoCsvLine *self) {
+csvtmt_row_final(CsvTomatoRow *self) {
 	for (size_t i = 0; i < self->len; i++) {
 		free(self->columns[i]);
 		self->columns[i] = NULL;
 	}
-	self->len = 0;
+	memset(self, 0, sizeof(*self));
 }
 
 static void
@@ -309,8 +309,8 @@ append_column_to_stream(
 }
 
 void
-csvtmt_csvline_append_to_stream(
-	CsvTomatoCsvLine *self,
+csvtmt_row_append_to_stream(
+	CsvTomatoRow *self,
 	FILE *fp,
 	bool wrap,
 	CsvTomatoError *error
@@ -334,8 +334,8 @@ csvtmt_csvline_append_to_stream(
 }
 
 void
-csvtmt_csvline_set_clone(
-	CsvTomatoCsvLine *self,
+csvtmt_row_set_clone(
+	CsvTomatoRow *self,
 	size_t index,
 	const char *col,
 	CsvTomatoError *error
