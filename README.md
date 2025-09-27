@@ -2,7 +2,35 @@
 
 CSVファイルをSQL文で操作できるSQLiteライクなCライブラリです。
 
-## 使い方
+## ビルド方法
+
+```
+$ make
+$ file csvtomato.so
+$ ./csvtomato.out
+```
+
+## シェルの使い方
+
+`csvtomato.out`を実行するとシェルが起動します。
+
+```
+$ ./csvtomato.out
+test_db > 
+```
+
+対話モードでSQLを実行できます。
+
+```
+test_db > CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, age INTEGER, name TEXT);
+test_db > INSERT INTO users (age, name) VALUES (20, "Taro");
+test_db > INSERT INTO users (age, name) VALUES (30, "Hanako");
+test_db > SELECT * FROM users;
+1 20 Taro
+2 30 Hanako
+```
+
+## ライブラリの使い方
 
 ### データベースを開く
 
