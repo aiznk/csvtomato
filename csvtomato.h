@@ -852,6 +852,22 @@ csvtmt_row_final(CsvTomatoRow *self);
 
 // models.c
 
+const char *
+csvtmt_header_has_column_types(
+	CsvTomatoHeader *self, 
+	const char *column_names[], 
+	size_t column_names_len,
+	CsvTomatoError *error
+);
+
+const char *
+csvtmt_header_has_key_values_types(
+	CsvTomatoHeader *self, 
+	CsvTomatoKeyValue key_values[], 
+	size_t key_values_len,
+	CsvTomatoError *error
+);
+
 void
 csvtmt_model_init(CsvTomatoModel *self, const char *db_dir, CsvTomatoError *error);
 

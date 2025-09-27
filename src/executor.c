@@ -108,6 +108,7 @@ csvtmt_executor_exec(
 
 	CsvTomatoStackElem pop;
 	CsvTomatoResult result = CSVTMT_DONE;
+	const char *not_found;
 
 	model->stack_len = 0;
 
@@ -276,6 +277,16 @@ csvtmt_executor_exec(
 					restore_save_index();
 				}
 				continue;
+			}
+
+			not_found = csvtmt_header_has_key_values_types(
+				&model->header,
+				model->update_set_key_values,
+				model->update_set_key_values_len,
+				error
+			);
+			if (not_found) {
+				goto not_found_keys;
 			}
 
 			if (model->stack_len) {
@@ -884,6 +895,10 @@ done:
 ret_row:
 	cleanup();
 	return CSVTMT_ROW;
+not_found_keys:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "not found keys");
+	cleanup();
+	return CSVTMT_ERROR;
 failed_to_store_selected_columns:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to store selected columns");
 	cleanup();
