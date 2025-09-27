@@ -92,6 +92,15 @@ csvtmt_executor_exec(
 		dst = model->stack[model->stack_len-1];\
 	}\
 
+	#define restore_save_index() {\
+		if (model->save_opcodes_index == 0) {\
+			model->opcodes_index = 0;\
+		} else {\
+			model->opcodes_index = model->save_opcodes_index-1;\
+		}\
+	}\
+
+	// puts("exec");
 	CsvTomatoString *buf = csvtmt_str_new();
 	if (!buf) {
 		goto failed_to_allocate_buffer;
@@ -102,7 +111,7 @@ csvtmt_executor_exec(
 
 	model->stack_len = 0;
 
-	for (; model->opcodes_index < opcodes_len; model->opcodes_index++) {
+	for (; model->opcodes_index < opcodes_len; ) {
 		const CsvTomatoOpcodeElem *op = &opcodes[model->opcodes_index];
 
 		switch (op->kind) {
@@ -199,6 +208,7 @@ csvtmt_executor_exec(
 			}
 		*/
 		case CSVTMT_OP_UPDATE_STMT_BEG: {
+			// puts("update beg");
 			if (model->mmap.fd == 0) {
 				model->table_name = op->obj.update_stmt.table_name;
 				store_table_path(model, model->table_name);
@@ -240,13 +250,13 @@ csvtmt_executor_exec(
 					CSVTMT_OP_UPDATE_STMT_END,
 					error
 				);
-				model->opcodes_index--;
 				model->skip = true;
 				csvtmt_row_final(&model->row);
 				continue;
 			}
 		} break;
 		case CSVTMT_OP_UPDATE_STMT_END: {
+			// puts("update end");
 			if (model->skip) {
 				if (*model->mmap.cur == '\0') {
 					csvtmt_close_mmap(model);
@@ -261,8 +271,9 @@ csvtmt_executor_exec(
 					}
 					csvtmt_clear_rows(model->rows);
 					csvtmt_row_final(&model->row);
+					model->opcodes_index++;
 				} else {
-					model->opcodes_index = model->save_opcodes_index-1;
+					restore_save_index();
 				}
 				continue;
 			}
@@ -317,8 +328,9 @@ csvtmt_executor_exec(
 						csvtmt_clear_rows(model->rows);
 						csvtmt_row_final(&model->row);
 					} else {
-						model->opcodes_index = model->save_opcodes_index-1;
+						restore_save_index();
 						csvtmt_row_final(&model->row);
+						continue;
 					}
 				}
 			} else {
@@ -359,19 +371,99 @@ csvtmt_executor_exec(
 		} break;
 
 		case CSVTMT_OP_SELECT_STMT_BEG: {
-			model->table_name = op->obj.select_stmt.table_name;
-			model->column_names_len = 0;
-			store_table_path(model, model->table_name);
+			// puts("select beg");
+			if (model->mmap.fd == 0) {
+				model->table_name = op->obj.select_stmt.table_name;
+				model->column_names_len = 0;
+				store_table_path(model, model->table_name);
+
+				csvtmt_open_mmap_for_read_write(model, model->table_path, error);
+				if (error->error) {
+					goto failed_to_open_mmap;
+				}				
+
+				model->mmap.cur = (char *) csvtmt_header_read_from_string(&model->header, model->mmap.cur, error);
+				if (error->error) {
+					goto failed_to_read_header;
+				}
+			}
+
+			if (*model->mmap.cur == '\0') {
+				csvtmt_close_mmap(model);
+				goto done;
+			}
+
+			model->skip = false;
+			model->save_opcodes_index = model->opcodes_index;
+			model->column_names_is_star = false;
+			// printf("save_opcodes_index[%ld]\n", model->save_opcodes_index);
+			// puts("init");
+
+			csvtmt_parse_row_from_mmap(model, error);
+			if (error->error) {
+				goto failed_to_parse_row;
+			}
+			if (csvtmt_is_deleted_row(&model->row)) {
+				// puts("deleted row");
+				model->opcodes_index = skip_to(
+					model,
+					opcodes,
+					opcodes_len,
+					CSVTMT_OP_SELECT_STMT_END,
+					error
+				);
+				model->skip = true;
+				csvtmt_row_final(&model->row);
+				continue;
+			}
 		} break;
 		case CSVTMT_OP_SELECT_STMT_END: {
-			result = csvtmt_select(model, error);
-			if (error->error) {
-				goto select_error;
+			// puts("select end");
+			if (model->skip) {
+				csvtmt_row_final(&model->row);
+				restore_save_index();
+				continue;
 			}
-			if (result == CSVTMT_ROW) {
+			if (model->stack_len) {
+				CsvTomatoStackElem top;
+				stack_top(top);
+				if (top.kind != CSVTMT_STACK_ELEM_BOOL_VALUE) {
+					// WHERE無し。全取得。
+					// puts("where nashi 1");
+					csvtmt_store_selected_columns(model, &model->row, error);
+					if (error->error) {
+						goto failed_to_store_selected_columns;
+					}
+					restore_save_index();
+					goto ret_row;
+				} else if (top.obj.bool_value.value) {
+					// WHERE match
+					// puts("match");
+					csvtmt_store_selected_columns(model, &model->row, error);
+					if (error->error) {
+						goto failed_to_store_selected_columns;
+					}
+					restore_save_index();
+					goto ret_row;
+				} else {
+					// WHERE not match
+					// puts("where not match");
+					csvtmt_row_final(&model->row);
+					restore_save_index();
+					continue;
+				}
+			} else {
+				// WHERE無し。全取得。
+				// puts("where nashi 2");
+				csvtmt_store_selected_columns(model, &model->row, error);
+				if (error->error) {
+					goto failed_to_store_selected_columns;
+				}
+				restore_save_index();
 				goto ret_row;
 			}
 		} break;
+
 		case CSVTMT_OP_INSERT_STMT_BEG: {
 			model->table_name = op->obj.insert_stmt.table_name;
 			model->column_names_len = 0;
@@ -518,6 +610,8 @@ csvtmt_executor_exec(
 					default: goto invalid_mode; break;
 					case CSVTMT_MODE_WHERE: {
 						const char *col = model->row.columns[index];
+						assert(model->row.len);
+						assert(col);
 						char num[CSVTMT_NUM_STR_SIZE];
 						snprintf(num, sizeof num, "%ld", rhs.obj.int_value.value);
 						elem.obj.bool_value.value = !strcmp(num, col);
@@ -608,6 +702,7 @@ csvtmt_executor_exec(
 				switch (pop.kind) {
 				default: goto invalid_elem_kind; break;
 				case CSVTMT_STACK_ELEM_STAR:
+					// puts("star");
 					if (model->column_names_is_star) {
 						goto multiple_star_error;
 					}
@@ -723,6 +818,7 @@ csvtmt_executor_exec(
 		} break;
 		case CSVTMT_OP_CREATE_TABLE_STMT_END: {
 			if (!model->do_create_table) {
+				model->opcodes_index++;
 				continue;
 			}
 
@@ -744,6 +840,7 @@ csvtmt_executor_exec(
 		} break;
 		case CSVTMT_OP_COLUMN_DEF: {
 			if (!model->do_create_table) {
+				model->opcodes_index++;
 				continue;
 			}
 
@@ -774,14 +871,23 @@ csvtmt_executor_exec(
 			csvtmt_str_push_back(buf, ',');
 		} break;
 		}
+
+		model->opcodes_index++;
 	}
 
 	cleanup();
 	return result;
 
+done:
+	cleanup();
+	return CSVTMT_DONE;
 ret_row:
 	cleanup();
 	return CSVTMT_ROW;
+failed_to_store_selected_columns:
+	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to store selected columns");
+	cleanup();
+	return CSVTMT_ERROR;
 failed_to_push_row:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "failed to push row");
 	cleanup();
@@ -866,9 +972,6 @@ invalid_stack_elem_kind:
 	csvtmt_error_format(error, CSVTMT_ERR_EXEC, "invalid stack element kind");
 	cleanup();
 	return CSVTMT_ERROR;
-select_error:
-	cleanup();
-	return CSVTMT_ERROR;	
 insert_error:
 	cleanup();
 	return CSVTMT_ERROR;	

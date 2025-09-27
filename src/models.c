@@ -659,8 +659,8 @@ array_overflow:
 	return;
 }
 
-static void
-store_selected_columns(CsvTomatoModel *model, CsvTomatoRow *row, CsvTomatoError *error) {
+void
+csvtmt_store_selected_columns(CsvTomatoModel *model, CsvTomatoRow *row, CsvTomatoError *error) {
 	CsvTomatoColumnType *types = model->header.types;
 	size_t tlen = model->header.types_len;
 	const char **cols = model->column_names;

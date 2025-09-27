@@ -288,6 +288,7 @@ test_tomato(void) {
 	CsvTomatoError error = {0};
 	CsvTomato *db;
 	CsvTomatoStmt *stmt;
+	CsvTomatoResult result;
 
 	#define clear_table() {\
 		clear("users");\
@@ -312,6 +313,7 @@ test_tomato(void) {
 
 	// section 1
 	clear_table();
+
 	csvtmt_exec(
 		db,
 		"INSERT INTO users (name, age) VALUES (\"\\\"hige,hoge\\\"\", 20);",
@@ -330,7 +332,7 @@ test_tomato(void) {
 		"0,2,\"hige,hoge\",20\n"
 	));
 
-	/*
+	
 	assert(csvtmt_prepare(
 		db,
 		"SELECT name FROM users;",
@@ -345,6 +347,7 @@ test_tomato(void) {
 	assert(!strcmp(stmt->model.row.columns[2], "\"hige,hoge\""));
 	assert(!strcmp(stmt->model.row.columns[3], "20"));
 
+	// raise(SIGTRAP);
 	assert(csvtmt_step(stmt, &error) == CSVTMT_ROW);
 	assert(stmt->model.row.len);
 	assert(!strcmp(stmt->model.row.columns[0], "0"));
@@ -356,6 +359,7 @@ test_tomato(void) {
 	csvtmt_finalize(stmt);
 
 	// section 2
+
 	clear_table();
 
 	csvtmt_exec(
@@ -364,7 +368,6 @@ test_tomato(void) {
 		&error
 	);
 	assert(!error.error);
-
 	csvtmt_exec(
 		db,
 		"INSERT INTO users (name, age) VALUES (\"Taro\", 30);",
@@ -398,7 +401,6 @@ test_tomato(void) {
 		"0,2,\"Taro\",30\n"
 		"0,3,\"Bob\",20\n"
 	));
-
 	// SELECT with star
 
 	assert(csvtmt_prepare(
@@ -418,7 +420,8 @@ test_tomato(void) {
 	assert(!strcmp(stmt->model.selected_columns[1], "Alice"));
 	assert(!strcmp(stmt->model.selected_columns[2], "20"));
 
-	assert(csvtmt_step(stmt, &error) == CSVTMT_ROW);
+	result = csvtmt_step(stmt, &error);
+	assert(result == CSVTMT_ROW);
 	assert(stmt->model.row.len);
 	assert(!strcmp(stmt->model.selected_columns[0], "3"));
 	assert(!strcmp(stmt->model.selected_columns[1], "Bob"));
@@ -428,23 +431,23 @@ test_tomato(void) {
 
 	// SELECT 
 
-	assert(csvtmt_prepare(
-		db,
-		"SELECT age, name FROM users WHERE age < 30;",
-		&stmt,
-		&error
-	) == CSVTMT_OK);
+	// assert(csvtmt_prepare(
+	// 	db,
+	// 	"SELECT age, name FROM users WHERE age < 30;",
+	// 	&stmt,
+	// 	&error
+	// ) == CSVTMT_OK);
 
-	assert(csvtmt_step(stmt, &error) == CSVTMT_ROW);
-	assert(stmt->model.row.len);
-	assert(!strcmp(stmt->model.row.columns[0], "0"));
-	assert(!strcmp(stmt->model.row.columns[1], "1"));
-	assert(!strcmp(stmt->model.row.columns[2], "Alice"));
-	assert(!strcmp(stmt->model.row.columns[3], "20"));
-	assert(!strcmp(stmt->model.selected_columns[0], "20"));
-	assert(!strcmp(stmt->model.selected_columns[1], "Alice"));
+	// assert(csvtmt_step(stmt, &error) == CSVTMT_ROW);
+	// assert(stmt->model.row.len);
+	// assert(!strcmp(stmt->model.row.columns[0], "0"));
+	// assert(!strcmp(stmt->model.row.columns[1], "1"));
+	// assert(!strcmp(stmt->model.row.columns[2], "Alice"));
+	// assert(!strcmp(stmt->model.row.columns[3], "20"));
+	// assert(!strcmp(stmt->model.selected_columns[0], "20"));
+	// assert(!strcmp(stmt->model.selected_columns[1], "Alice"));
 
-	csvtmt_finalize(stmt);
+	// csvtmt_finalize(stmt);
 
 	// SELECT 
 
@@ -536,7 +539,7 @@ test_tomato(void) {
 	assert(csvtmt_step(stmt, &error) == CSVTMT_DONE);
 
 	csvtmt_finalize(stmt);
-	*/
+	
 	// done
 	csvtmt_close(db);
 }
