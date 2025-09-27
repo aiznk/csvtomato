@@ -49,16 +49,22 @@ csvtmt_strdup(const char *s, CsvTomatoError *error) {
 
 void
 csvtmt_quick_exec(const char *db_dir, const char *query) {
+	CsvTomatoError error = {0};
+	CsvTomato *db = NULL;
+	CsvTomatoStmt *stmt = NULL;
+
 	#define check_error() {\
 		if (error.error) {\
+			if (stmt) {\
+				csvtmt_stmt_del(stmt);\
+			}\
+			if (db) {\
+				csvtmt_close(db);\
+			}\
 			csvtmt_error_show(&error);\
 			return;\
 		}\
 	}\
-
-	CsvTomatoError error = {0};
-	CsvTomato *db;
-	CsvTomatoStmt *stmt;
 
 	db = csvtmt_open(db_dir, &error);
 	check_error();
@@ -67,12 +73,19 @@ csvtmt_quick_exec(const char *db_dir, const char *query) {
 	check_error();
 
 	while (csvtmt_step(stmt, &error) == CSVTMT_ROW) {
-		check_error();
+		if (error.error) {
+			csvtmt_error_show(&error);
+			memset(&error, 0, sizeof(error));
+		}
 		for (size_t i = 0; i < stmt->model.selected_columns_len; i++) {
 			const char *col = stmt->model.selected_columns[i];
 			printf("%s ", col);
 		}
 		printf("\n");
+	}
+	if (error.error) {
+		csvtmt_error_show(&error);
+		memset(&error, 0, sizeof(error));
 	}
 
 	csvtmt_finalize(stmt);

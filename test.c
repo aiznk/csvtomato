@@ -638,7 +638,6 @@ test_executor_common(void) {
 	);
 }
 
-
 int 
 main(void) {
 	test_tomato();	

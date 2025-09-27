@@ -230,8 +230,8 @@ failed_to_parse_types:
 	return;
 }
 
-static const char *
-header_has_column_types(
+const char *
+csvtmt_header_has_column_types(
 	CsvTomatoHeader *self, 
 	const char *column_names[], 
 	size_t column_names_len,
@@ -257,8 +257,8 @@ header_has_column_types(
 	return NULL;
 }
 
-static const char *
-header_has_key_values_types(
+const char *
+csvtmt_header_has_key_values_types(
 	CsvTomatoHeader *self, 
 	CsvTomatoKeyValue key_values[], 
 	size_t key_values_len,
@@ -891,7 +891,7 @@ csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error) {
 	/*
 	const char *not_found = NULL;
 	
-	not_found = header_has_key_values_types(
+	not_found = csvtmt_header_has_key_values_types(
 		&model->header,
 		model->update_set_key_values,
 		model->update_set_key_values_len,
@@ -1015,7 +1015,7 @@ csvtmt_select(CsvTomatoModel *model, CsvTomatoError *error) {
 		// INSERT INTO table (id, name) VALUES (1, "Alice")
 		// だった場合はヘッダにid, nameが有るか調べる。
 		// そのインデックスの位置にVALUESをセットする。
-		not_found = header_has_column_types(
+		not_found = csvtmt_header_has_column_types(
 			&model->header,
 			model->column_names,
 			model->column_names_len,
@@ -1183,7 +1183,7 @@ csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error) {
 	// INSERT INTO table (id, name) VALUES (1, "Alice")
 	// だった場合はヘッダにid, nameが有るか調べる。
 	// そのインデックスの位置にVALUESをセットする。
-	not_found = header_has_column_types(
+	not_found = csvtmt_header_has_column_types(
 		&model->header,
 		model->column_names,
 		model->column_names_len,
