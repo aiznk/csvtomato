@@ -947,3 +947,6 @@ csvtmt_update_all(CsvTomatoModel *model, CsvTomatoError *error);
 
 bool
 csvtmt_is_deleted_row(const CsvTomatoRow *row);
+
+void
+csvtmt_store_selected_columns(CsvTomatoModel *model, CsvTomatoRow *row, CsvTomatoError *error);
