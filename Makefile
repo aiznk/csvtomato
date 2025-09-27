@@ -21,11 +21,16 @@ $(TEST_PROG): $(SRCS) test.c
 $(SHELL_PROG): $(SRCS) shell.c
 	$(CC) $(PROG_FLAGS_MEM) -o $@ $^
 
-.PHONY: clean test
+.PHONY: clean t d
 clean:
 	rm -f *.out *.so *.o src/*.o
 
-test:
+t:
 	make clean
 	make
 	./test.out 
+
+d:
+	make clean
+	make
+	gdb ./test.out
