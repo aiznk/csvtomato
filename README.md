@@ -95,7 +95,7 @@ CSVファイルはこのフォルダ以下に作成されます。
 	);
 ```
 
-`csvtmt_execute()`でSQL文を実行してCSVファイルの操作が可能です。
+`csvtmt_exec()`でSQL文を実行してCSVファイルの操作が可能です。
 上記を実行すると以下のようなCSVファイル（`users.csv`）が`test_db`以下に作成されます。
 
 ```csv
