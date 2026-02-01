@@ -32,6 +32,13 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 	switch (self->kind) {
 	case CSVTMT_ND_NONE:
 		break;
+	case CSVTMT_ND_SHOW_STMT:
+		csvtmt_node_del_all(self->obj.show_stmt.show_tables_stmt);
+		break;
+	case CSVTMT_ND_SHOW_TABLES_STMT:
+		free(self->obj.show_tables_stmt.db_name);
+		self->obj.show_tables_stmt.db_name = NULL;
+		break;
 	case CSVTMT_ND_STMT_LIST:
 		// puts("CSVTMT_ND_STMT_LIST");
 		for (CsvTomatoNode *cur = self->obj.sql_stmt_list.sql_stmt_list; cur; ) {
@@ -47,6 +54,7 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 		csvtmt_node_del_all(self->obj.sql_stmt.select_stmt);
 		csvtmt_node_del_all(self->obj.sql_stmt.update_stmt);
 		csvtmt_node_del_all(self->obj.sql_stmt.delete_stmt);
+		csvtmt_node_del_all(self->obj.sql_stmt.show_stmt);
 		break;
 	case CSVTMT_ND_CREATE_TABLE_STMT:
 		// puts("CSVTMT_ND_CREATE_TABLE_STMT");
@@ -161,6 +169,8 @@ static CsvTomatoNode *parse_select_stmt(CsvTomatoParser *self, CsvTomatoToken **
 static CsvTomatoNode *parse_insert_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_update_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_delete_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
+static CsvTomatoNode *parse_show_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
+static CsvTomatoNode *parse_show_tables_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_column_name(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_values(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
 static CsvTomatoNode *parse_expr(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error);
@@ -323,6 +333,14 @@ parse_sql_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *er
 		goto fail;
 	}
 	if (n1->obj.sql_stmt.delete_stmt) {
+		return n1;
+	}
+
+	n1->obj.sql_stmt.show_stmt = parse_show_stmt(self, token, error);
+	if (error->error) {
+		goto fail;
+	}
+	if (n1->obj.sql_stmt.show_stmt) {
 		return n1;
 	}
 
@@ -589,6 +607,94 @@ not_found_from:
 	csvtmt_node_del_all(n1);
 	return NULL;
 ret_null:
+	csvtmt_node_del_all(n1);
+	return NULL;
+}
+
+static CsvTomatoNode *
+parse_show_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error) {
+	CsvTomatoToken **save = token;
+	if (is_end(token)) {
+		return NULL;
+	}
+
+	CsvTomatoNode *n1 = csvtmt_node_new(CSVTMT_ND_SHOW_STMT, error);
+	if (error->error) {
+		return NULL;
+	}
+
+	if (kind(token) != CSVTMT_TK_SHOW) {
+		goto ret_null;
+	} else {
+		// pass
+		// SHOWキーワードはここではパースしない。
+	}
+
+	n1->obj.show_stmt.show_tables_stmt = parse_show_tables_stmt(self, token, error);
+	if (!n1->obj.show_stmt.show_tables_stmt) {
+		goto invalid_show_stmt;
+	}
+
+	return n1;
+ret_null:
+	*token = *save;
+	csvtmt_node_del_all(n1);
+	return NULL;
+invalid_show_stmt:
+	*token = *save;
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "invalid SHOW statement");
+	csvtmt_node_del_all(n1);
+	return NULL;	
+}
+
+static CsvTomatoNode *
+parse_show_tables_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error) {
+	CsvTomatoToken **save = token;
+	if (is_end(token)) {
+		return NULL;
+	}
+
+	CsvTomatoNode *n1 = csvtmt_node_new(CSVTMT_ND_SHOW_TABLES_STMT, error);
+	if (error->error) {
+		return NULL;
+	}
+
+	if (kind(token) != CSVTMT_TK_SHOW) {
+		goto ret_null;
+	} else {
+		next(token);
+	}
+	if (kind(token) != CSVTMT_TK_TABLES) {
+		goto ret_null;
+	} else {
+		next(token);
+	}
+	if (kind(token) == CSVTMT_TK_FROM) {
+		next(token);
+		if (kind(token) != CSVTMT_TK_IDENT) {
+			goto not_found_db_name;
+		} else {
+			n1->obj.show_tables_stmt.db_name = csvtmt_strdup(text(token), error);
+			if (error->error) {
+				goto failed_to_strdup;
+			}
+			next(token);
+		}
+	}
+
+	return n1;
+ret_null:
+	*token = *save;
+	csvtmt_node_del_all(n1);
+	return NULL;
+failed_to_strdup:
+	*token = *save;
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to strdup");
+	csvtmt_node_del_all(n1);
+	return NULL;
+not_found_db_name:
+	*token = *save;
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "not found database name on SHOW TABLES FROM");
 	csvtmt_node_del_all(n1);
 	return NULL;
 }

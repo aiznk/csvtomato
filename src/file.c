@@ -1,5 +1,131 @@
 #include <csvtomato.h>
 
+void
+csvtmt_dir_node_del(CsvTomatoDirNode *self) {
+    if (self) {
+        free(self);
+    }
+}
+
+CsvTomatoDirNode *
+csvtmt_dir_node_new(void) {
+    CsvTomatoDirNode *self = calloc(1, sizeof(CsvTomatoDirNode));
+    if (!self) {
+        return NULL;
+    }
+    return self;
+}
+
+const char *
+csvtmt_dir_node_name(const CsvTomatoDirNode *self) {
+    if (!self) {
+        return NULL;
+    }
+
+#if defined(LANG1_FILE__WINDOWS)
+    return self->finddata.cFileName;
+#else
+    return self->node->d_name;
+#endif
+}
+
+int
+csvtmt_dir_close(CsvTomatoDir *self) {
+    if (self) {
+        int ret = 0;
+#if defined(_WIN32)
+        if (self->handle) {
+            ret = FindClose(self->handle);
+            if (ret == 0) {
+                // Error
+            }
+            self->handle = NULL;
+            ret = !ret;
+        } else {
+            ret = -1;
+        }
+#else
+        ret = closedir(self->directory);
+        if (ret != 0) {
+            // Error
+        }
+#endif
+        free(self);
+
+        return ret;
+    }
+
+    return -1;
+}
+
+CsvTomatoDir *
+csvtmt_dir_open(const char *path) {
+    if (!path) {
+        return NULL;
+    }
+
+    CsvTomatoDir *self = calloc(1, sizeof(CsvTomatoDir));
+    if (!self) {
+        return NULL;
+    }
+
+#if defined(_WIN32)
+    if (!csvtmt_file_exists(path)) {
+        return NULL;
+    }
+    self->handle = NULL;
+    snprintf(self->dirpath, sizeof(self->dirpath), "%s/*", path);
+#else
+    if (!(self->directory = opendir(path))) {
+        free(self);
+        return NULL;
+    }
+#endif
+    return self;
+}
+
+CsvTomatoDirNode *
+csvtmt_dir_read(CsvTomatoDir *self) {
+    if (!self) {
+        return NULL;
+    }
+
+    CsvTomatoDirNode *node = csvtmt_dir_node_new();
+    if (!node) {
+        return NULL;
+    }
+
+#if defined(_WIN32)
+    if (!self->handle) {
+        if ((self->handle = FindFirstFile(self->dirpath, &node->finddata)) == INVALID_HANDLE_VALUE) {
+            csvtmt_dir_node_del(node);
+            return NULL;
+
+        }
+
+    } else {
+        if (!FindNextFile(self->handle, &node->finddata)) {
+            csvtmt_dir_node_del(node);
+            return NULL; // Done to find
+        }
+    }
+
+#else
+    errno = 0;
+    if (!(node->node = readdir(self->directory))) {
+        if (errno != 0) {
+            csvtmt_dir_node_del(node);
+            return NULL;
+        } else {
+            // Done to readdir
+            csvtmt_dir_node_del(node);
+            return NULL;
+        }
+    }
+#endif
+    return node;
+}
+
 char *
 csvtmt_file_read(const char *path) {
     FILE *fp = fopen(path, "r");

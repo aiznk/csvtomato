@@ -1160,6 +1160,66 @@ failed_to_open_table:
 	return 0;
 }
 
+void
+if_csv_file_then_puts(const char *name) {
+	size_t len = strlen(name);
+	char buf[1024];
+	int bi = 0;
+	int i;
+
+	for (i = len-1; i >= 0; i--) {
+		if (bi >= 1024-1) {
+			break;
+		}
+		buf[bi++] = name[i];
+		buf[bi] = 0;
+		if (name[i] == '.') {
+			break;
+		}
+	}
+	if (bi && !strcmp(buf, "vsc.")) {
+		for (int j = 0; j < i; j++) {
+			putchar(name[j]);
+		}
+		puts("");
+	}
+}
+
+CsvTomatoResult
+csvtmt_show_tables(CsvTomatoModel *model, CsvTomatoError *error) {
+	const char *db_name = model->db_name;
+	if (!db_name) {
+		db_name = model->db_dir;
+	}
+
+	if (strcmp(db_name, model->db_dir)) {
+		csvtmt_error_push(error, CSVTMT_ERR_EXEC, "invalid database name \"%s\"", db_name);
+		return CSVTMT_ERROR;
+	}
+
+	CsvTomatoDir *dir = csvtmt_dir_open(db_name);
+	if (!dir) {
+		csvtmt_error_push(error, CSVTMT_ERR_EXEC, "failed to open directory \"%s\"", db_name);
+		return CSVTMT_ERROR;
+	}
+
+	for (;;) {
+		CsvTomatoDirNode *node = csvtmt_dir_read(dir);
+		if (!node) {
+			break;
+		}
+
+		const char *item_name = csvtmt_dir_node_name(node);
+		if_csv_file_then_puts(item_name);
+
+		csvtmt_dir_node_del(node);
+	}
+
+	csvtmt_dir_close(dir);
+	fflush(stdout);
+	return CSVTMT_OK;
+}
+
 CsvTomatoResult
 csvtmt_insert(CsvTomatoModel *model, CsvTomatoError *error) {
 	// INSERTでは単純なファイルへの追記を行う。

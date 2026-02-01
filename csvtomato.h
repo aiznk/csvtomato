@@ -24,6 +24,7 @@
     #include <utime.h>
 	#include <fcntl.h>
 	#include <signal.h>
+	#include <dirent.h>
     #define CSVTMT_MKDIR(path) mkdir(path, 0755)
 #endif
 
@@ -38,6 +39,11 @@ typedef enum {
 	CSVTMT_ROW,
 } CsvTomatoResult;
 
+typedef enum {
+	CSVTMT_DNT_ERROR,
+	CSVTMT_DNT_UNKNOWN,
+	CSVTMT_DNT_DIR,
+} CsvTomatoDirNodeType;
 enum {
 	CSVTMT_ERR_MSG_SIZE = 256,
 	CSVTMT_STR_SIZE = 256,
@@ -88,6 +94,8 @@ typedef enum {
 	CSVTMT_TK_INSERT,
 	CSVTMT_TK_UPDATE,
 	CSVTMT_TK_DELETE,
+	CSVTMT_TK_SHOW,
+	CSVTMT_TK_TABLES,
 	CSVTMT_TK_FROM,
 	CSVTMT_TK_SET,
 	CSVTMT_TK_WHERE,
@@ -114,6 +122,8 @@ typedef enum {
 	CSVTMT_ND_INSERT_STMT,
 	CSVTMT_ND_UPDATE_STMT,
 	CSVTMT_ND_DELETE_STMT,
+	CSVTMT_ND_SHOW_STMT,
+	CSVTMT_ND_SHOW_TABLES_STMT,
 	CSVTMT_ND_VALUES,
 	CSVTMT_ND_EXPR,
 	CSVTMT_ND_ASSIGN_EXPR,
@@ -137,6 +147,8 @@ typedef enum {
 	CSVTMT_OP_UPDATE_STMT_END,
 	CSVTMT_OP_UPDATE_SET_BEG,
 	CSVTMT_OP_UPDATE_SET_END,
+	CSVTMT_OP_SHOW_TABLES_BEG,
+	CSVTMT_OP_SHOW_TABLES_END,
 	CSVTMT_OP_WHERE_BEG,
 	CSVTMT_OP_WHERE_END,
 	CSVTMT_OP_DELETE_STMT_BEG,
@@ -167,6 +179,12 @@ typedef enum {
 /********
 * types *
 ********/
+
+struct CsvTomatoDir;
+typedef struct CsvTomatoDir CsvTomatoDir;
+
+struct CsvTomatoDirNode;
+typedef struct CsvTomatoDirNode CsvTomatoDirNode;
 
 struct CsvTomatoErrorElem;
 typedef struct CsvTomatoErrorElem CsvTomatoErrorElem;
@@ -254,6 +272,23 @@ DECL_ARRAY(CsvTomatoRows, csvtmt_rows, CsvTomatoRow)
 * structs *
 **********/
 
+struct CsvTomatoDirNode {
+#if defined(_WIN32)
+    WIN32_FIND_DATA finddata;
+#else
+    struct dirent* node;
+#endif
+};
+
+struct CsvTomatoDir {
+#if defined(_WIN32)
+    HANDLE handle;
+    char dirpath[1024];
+#else
+    DIR* directory;
+#endif
+};
+
 struct CsvTomatoErrorElem {
 	CsvTomatoErrorKind kind;
 	char message[CSVTMT_ERR_MSG_SIZE];
@@ -299,7 +334,14 @@ struct CsvTomatoNode {
 			struct CsvTomatoNode *insert_stmt;
 			struct CsvTomatoNode *update_stmt;
 			struct CsvTomatoNode *delete_stmt;
+			struct CsvTomatoNode *show_stmt;
 		} sql_stmt;
+		struct {
+			struct CsvTomatoNode *show_tables_stmt;
+		} show_stmt;
+		struct {
+			char *db_name;
+		} show_tables_stmt;
 		struct {
 			char *table_name;
 			struct CsvTomatoNode *column_def_list;
@@ -395,6 +437,9 @@ struct CsvTomatoOpcodeElem {
 		struct {
 			char *table_name;
 		} delete_stmt;
+		struct {
+			char *db_name;
+		} show_tables_stmt;
 		struct {
 			char *value;
 		} ident;
@@ -544,6 +589,7 @@ struct CsvTomatoModel {
 	CsvTomatoStackElem stack[CSVTMT_EXEC_STACK_SIZE];
 	size_t stack_len;
 	const char *table_name;
+	const char *db_name;
 	char table_path[CSVTMT_PATH_SIZE];
 	bool do_create_table;
 	const char *column_names[CSVTMT_COLUMN_NAMES_ARRAY_SIZE];
@@ -787,6 +833,24 @@ csvtmt_executor_exec(
 
 // file.c
 
+void
+csvtmt_dir_node_del(CsvTomatoDirNode *self);
+
+CsvTomatoDirNode *
+csvtmt_dir_node_new(void);
+
+const char *
+csvtmt_dir_node_name(const CsvTomatoDirNode *self);
+
+int
+csvtmt_dir_close(CsvTomatoDir *self);
+
+CsvTomatoDir *
+csvtmt_dir_open(const char *path);
+
+CsvTomatoDirNode *
+csvtmt_dir_read(CsvTomatoDir *self);
+
 char *
 csvtmt_file_read(const char *path);
 
@@ -893,6 +957,9 @@ csvtmt_update(CsvTomatoModel *model, CsvTomatoError *error);
 
 CsvTomatoResult
 csvtmt_delete(CsvTomatoModel *model, CsvTomatoError *error);
+
+CsvTomatoResult
+csvtmt_show_tables(CsvTomatoModel *model, CsvTomatoError *error);
 
 void
 csvtmt_header_read_from_table(CsvTomatoHeader *self, const char *table_path, CsvTomatoError *error);

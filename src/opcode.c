@@ -28,6 +28,10 @@ destroy_elem(CsvTomatoOpcodeElem *elem) {
 	case CSVTMT_OP_STAR: break;
 	case CSVTMT_OP_PLACE_HOLDER: break;
 	case CSVTMT_OP_ASSIGN: break;
+	case CSVTMT_OP_SHOW_TABLES_BEG: 
+		free(elem->obj.show_tables_stmt.db_name);
+		break;
+	case CSVTMT_OP_SHOW_TABLES_END: break;
 	case CSVTMT_OP_CREATE_TABLE_STMT_BEG:
 		free(elem->obj.create_table_stmt.table_name);
 		break;
@@ -120,6 +124,8 @@ push(
 static void opcode_sql_stmt_list(CsvTomatoOpcode *self, CsvTomatoNode *node, CsvTomatoError *error);
 static void opcode_sql_stmt(CsvTomatoOpcode *self, CsvTomatoNode *node, CsvTomatoError *error);
 static void opcode_create_table_stmt(CsvTomatoOpcode *self, CsvTomatoNode *node, CsvTomatoError *error);
+static void opcode_show_stmt(CsvTomatoOpcode *self, CsvTomatoNode *node, CsvTomatoError *error);
+static void opcode_show_tables_stmt(CsvTomatoOpcode *self, CsvTomatoNode *node, CsvTomatoError *error);
 static void opcode_select_stmt(CsvTomatoOpcode *self, CsvTomatoNode *node, CsvTomatoError *error);
 static void opcode_insert_stmt(CsvTomatoOpcode *self, CsvTomatoNode *node, CsvTomatoError *error);
 static void opcode_update_stmt(CsvTomatoOpcode *self, CsvTomatoNode *node, CsvTomatoError *error);
@@ -161,6 +167,7 @@ opcode_sql_stmt(CsvTomatoOpcode *self, CsvTomatoNode *node, CsvTomatoError *erro
 	opcode_insert_stmt(self, node->obj.sql_stmt.insert_stmt, error);
 	opcode_update_stmt(self, node->obj.sql_stmt.update_stmt, error);
 	opcode_delete_stmt(self, node->obj.sql_stmt.delete_stmt, error);
+	opcode_show_stmt(self, node->obj.sql_stmt.show_stmt, error);
 }
 
 static void
@@ -380,6 +387,44 @@ opcode_insert_stmt(
 			return;
 		}
 	}
+}
+
+static void
+opcode_show_stmt(CsvTomatoOpcode *self, CsvTomatoNode *node, CsvTomatoError *error) {
+	if (!node) {
+		return;
+	}
+	assert(node->kind == CSVTMT_ND_SHOW_STMT);
+	opcode_show_tables_stmt(self, node->obj.show_stmt.show_tables_stmt, error);
+}
+
+static void
+opcode_show_tables_stmt(CsvTomatoOpcode *self, CsvTomatoNode *node, CsvTomatoError *error) {
+	if (!node) {
+		return;
+	}
+	assert(node->kind == CSVTMT_ND_SHOW_TABLES_STMT);
+
+	{
+		CsvTomatoOpcodeElem elem = {0};
+
+		elem.kind = CSVTMT_OP_SHOW_TABLES_BEG;
+		elem.obj.show_tables_stmt.db_name = csvtmt_move(node->obj.show_tables_stmt.db_name);
+		node->obj.show_tables_stmt.db_name = NULL;
+		push(self, elem, error);
+		if (error->error) {
+			return;
+		}
+	}	
+	{
+		CsvTomatoOpcodeElem elem = {0};
+
+		elem.kind = CSVTMT_OP_SHOW_TABLES_END;
+		push(self, elem, error);
+		if (error->error) {
+			return;
+		}
+	}	
 }
 
 static void

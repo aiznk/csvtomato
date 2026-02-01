@@ -125,7 +125,13 @@ csvtmt_executor_exec(
 		case CSVTMT_OP_PLACE_HOLDER: {
 			goto found_place_holder;
 		} break;
-
+		case CSVTMT_OP_SHOW_TABLES_BEG: {
+			model->db_name = op->obj.show_tables_stmt.db_name;
+			csvtmt_show_tables(model, error);
+		} break;
+		case CSVTMT_OP_SHOW_TABLES_END: {
+			goto done;
+		} break;
 		/*
 			UPDATE users SET age = 1, name = "Taro" WHERE age == 1 AND name = "Ken"; 
 			↓

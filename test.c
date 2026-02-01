@@ -338,6 +338,18 @@ test_tomato(void) {
 	);
 	assert(error.error);
 
+	// SHOW TABLES
+	csvtmt_error_clear(&error);
+	result = csvtmt_exec(
+		db,
+		"SHOW TABLES;",
+		&error
+	);
+	if (error.error) {
+		csvtmt_error_show(&error);
+	}
+	assert(result == CSVTMT_DONE);
+	
 	// section 1
 	clear_table();
 

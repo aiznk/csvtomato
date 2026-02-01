@@ -8,7 +8,14 @@ sql_stmt ::=
 	insert_stmt |
 	update_stmt |
 	delete_stmt |
-	select_stmt
+	select_stmt |
+	show_stmt
+
+show_stmt ::=
+	show_tables_stmt
+
+show_tables_stmt ::=
+	SHOW TABLES [ FROM db_name ]
 
 create_table_stmt ::= 
 	CREATE TABLE [ IF NOT EXISTS ] table_name ( '(' column_def ( ',' column_def ) * ')' 
