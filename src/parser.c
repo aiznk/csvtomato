@@ -354,18 +354,6 @@ parse_create_table_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomato
 		goto fail;
 	}
 
-	// table_name
-	if (kind(token) != CSVTMT_TK_IDENT) {
-		csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found table_name on CREATE TABLE");
-		goto fail;
-	}
-
-	n1->obj.create_table_stmt.table_name = csvtmt_strdup(text(token), error);
-	if (error->error) {
-		goto fail;
-	}
-	next(token);
-
 	// [ IF NOT EXISTS ]
 	if (kind(token) == CSVTMT_TK_IF) {
 		next(token);
@@ -383,6 +371,18 @@ parse_create_table_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomato
 			goto fail;
 		}
 	}
+
+	// table_name
+	if (kind(token) != CSVTMT_TK_IDENT) {
+		csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "not found table_name on CREATE TABLE");
+		goto fail;
+	}
+
+	n1->obj.create_table_stmt.table_name = csvtmt_strdup(text(token), error);
+	if (error->error) {
+		goto fail;
+	}
+	next(token);
 
 	// '(' column_def ( ',' column_def )* ')'
 	if (kind(token) == CSVTMT_TK_BEG_PAREN) {

@@ -295,6 +295,7 @@ test_tomato(void) {
 
 	#define clear_table() {\
 		clear("users");\
+		csvtmt_error_clear(&error);\
 		csvtmt_exec(\
 			db,\
 			"CREATE TABLE IF NOT EXISTS users ("\
@@ -304,6 +305,9 @@ test_tomato(void) {
 			");",\
 			&error\
 		);\
+		if (error.error) {\
+			csvtmt_error_show(&error);\
+		}\
 		assert(!error.error);\
 	}\
 
@@ -313,6 +317,26 @@ test_tomato(void) {
 		csvtmt_error_show(&error);
 		return;
 	}
+
+	// CREATE TABLE
+	clear("users");
+	csvtmt_exec(
+		db,
+		"CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, age INTEGER);",
+		&error
+	);
+	assert(assert_file(
+		"test_db/users.csv",
+		"__MODE__,id INTEGER PRIMARY KEY AUTOINCREMENT,age INTEGER\n"
+	));
+
+	// CREATE TABLE (already exists table)
+	csvtmt_exec(
+		db,
+		"CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, age INTEGER);",
+		&error
+	);
+	assert(error.error);
 
 	// section 1
 	clear_table();
@@ -334,7 +358,6 @@ test_tomato(void) {
 		"0,1,\"\"\"hige,hoge\"\"\",20\n"
 		"0,2,\"hige,hoge\",20\n"
 	));
-
 	
 	assert(csvtmt_prepare(
 		db,
@@ -672,5 +695,6 @@ main(void) {
 	test_tomato();	
 	test_csv();
 	test_executor_common();
+	puts("OK");
 	return 0;
 }
