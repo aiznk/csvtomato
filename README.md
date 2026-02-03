@@ -1,5 +1,7 @@
 # CSV Tomato
 
+![image](./csvtomato.png)
+
 CSVファイルをSQL文で操作できるSQLiteライクなCライブラリです。
 
 ## ビルド方法
