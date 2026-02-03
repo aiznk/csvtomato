@@ -29,8 +29,16 @@ type_name ::=
 column_constraint ::= 
 	( PRIMARY KEY [ AUTOINCREMENT ] | NOT NULL 
 
+function ::=
+	count_func
+
+count_func ::= 
+	COUNT '(' ( column_name | '*' ) ')'
+
 select_stmt ::=
-	SELECT ( column_name ( ',' column_name ) ) * 
+	SELECT
+		( function ) | 
+		( ( column_name ( ',' column_name ) ) * )
 		FROM table_name [ WHERE expr ]
 
 insert_stmt ::=

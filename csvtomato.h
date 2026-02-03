@@ -94,6 +94,7 @@ typedef enum {
 	CSVTMT_TK_INSERT,
 	CSVTMT_TK_UPDATE,
 	CSVTMT_TK_DELETE,
+	CSVTMT_TK_COUNT,
 	CSVTMT_TK_SHOW,
 	CSVTMT_TK_TABLES,
 	CSVTMT_TK_FROM,
@@ -124,6 +125,8 @@ typedef enum {
 	CSVTMT_ND_DELETE_STMT,
 	CSVTMT_ND_SHOW_STMT,
 	CSVTMT_ND_SHOW_TABLES_STMT,
+	CSVTMT_ND_FUNCTION,
+	CSVTMT_ND_COUNT_FUNC,
 	CSVTMT_ND_VALUES,
 	CSVTMT_ND_EXPR,
 	CSVTMT_ND_ASSIGN_EXPR,
@@ -348,8 +351,15 @@ struct CsvTomatoNode {
 			bool if_not_exists;
 		} create_table_stmt;
 		struct {
+			struct CsvTomatoNode *count_func;
+		} function;
+		struct {
+			struct CsvTomatoNode *column_name;
+		} count_func;
+		struct {
 			char *table_name;
 			struct CsvTomatoNode *column_name_list;
+			struct CsvTomatoNode *function;
 			struct CsvTomatoNode *where_expr;
 		} select_stmt;
 		struct {

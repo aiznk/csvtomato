@@ -93,6 +93,7 @@ tokenize_ident(CsvTomatoTokenizer *self, CsvTomatoError *error) {
 	else if (!strcasecmp(tok->text, "update")) tok->kind = CSVTMT_TK_UPDATE;
 	else if (!strcasecmp(tok->text, "delete")) tok->kind = CSVTMT_TK_DELETE;
 	else if (!strcasecmp(tok->text, "show")) tok->kind = CSVTMT_TK_SHOW;
+	else if (!strcasecmp(tok->text, "count")) tok->kind = CSVTMT_TK_COUNT;
 	else if (!strcasecmp(tok->text, "tables")) tok->kind = CSVTMT_TK_TABLES;
 	else if (!strcasecmp(tok->text, "from")) tok->kind = CSVTMT_TK_FROM;
 	else if (!strcasecmp(tok->text, "set")) tok->kind = CSVTMT_TK_SET;
