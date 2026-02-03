@@ -236,9 +236,11 @@ opcode_function(
 		}
 	}
 
-	opcode_column_name(self, node->obj.count_func.column_name, error);
-	if (error->error) {
-		goto failed_to_opcode_column_name;
+	if (node->obj.function.expr) {
+		opcode_expr(self, node->obj.function.expr, error);
+		if (error->error) {
+			goto failed_to_opcode_expr;
+		}
 	}
 
 	{
@@ -251,8 +253,8 @@ opcode_function(
 	}
 
 	return;
-failed_to_opcode_column_name:
-	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "failed to parse column name for op-code");
+failed_to_opcode_expr:
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "failed to parse expression for op-code");
 	return;
 }
 
@@ -744,6 +746,11 @@ opcode_expr(
 	}
 
 	opcode_string(self, node->obj.expr.string, error);
+	if (error->error) {
+		return;
+	}
+
+	opcode_function(self, node->obj.expr.function, error);
 	if (error->error) {
 		return;
 	}

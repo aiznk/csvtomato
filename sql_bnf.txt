@@ -29,16 +29,9 @@ type_name ::=
 column_constraint ::= 
 	( PRIMARY KEY [ AUTOINCREMENT ] | NOT NULL 
 
-function ::=
-	count_func
-
-count_func ::= 
-	COUNT '(' ( column_name | '*' ) ')'
-
 select_stmt ::=
 	SELECT
-		( function ) | 
-		( ( column_name ( ',' column_name ) ) * )
+		expr_list
 		FROM table_name [ WHERE expr ]
 
 insert_stmt ::=
@@ -60,11 +53,18 @@ star ::=
 values ::= 
 	'(' expr ( ',' expr ) * ')'
 
+function ::=
+	( COUNT ) '(' expr ')'
+
+expr_list ::=
+	expr ( ',' expr ) *
+
 expr ::=
 	assign_expr |
 	digit |
 	string |
-	place_holder
+	place_holder |
+	function
 
 assign_expr ::=
 	ident '=' expr	

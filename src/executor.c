@@ -44,6 +44,12 @@ skip_to(
 	return 0;
 }
 
+typedef struct {
+	CsvTomatoFuncKind kind;
+	const char *column_name;
+	bool star;
+} ExecFunc;
+
 CsvTomatoResult
 csvtmt_executor_exec(
 	CsvTomatoExecutor *self,
@@ -109,6 +115,9 @@ csvtmt_executor_exec(
 	CsvTomatoStackElem pop;
 	CsvTomatoResult result = CSVTMT_DONE;
 	const char *not_found;
+	CsvTomatoOpcodeKind cur_context;
+	ExecFunc select_funcs[100];
+	size_t select_funcs_i = 0;
 
 	model->stack_len = 0;
 
@@ -119,6 +128,32 @@ csvtmt_executor_exec(
 		case CSVTMT_OP_NONE: 
 			goto invalid_op_kind;
 			break;
+		case CSVTMT_OP_FUNC_BEG:
+			break;
+		case CSVTMT_OP_FUNC_END: {
+			CsvTomatoStackElem top;
+			stack_pop(top);
+
+			ExecFunc *func = NULL;
+			switch (cur_context) {
+			default: goto invalid_context; break;
+			case CSVTMT_OP_SELECT_STMT_BEG:
+				// TODO: fix index out of range
+				func = &select_funcs[select_funcs_i++];
+				break;
+			}
+
+			if (func) {
+				switch (top.kind) {
+				case CSVTMT_STACK_ELEM_STAR:
+					func->star = true;
+					break;
+				case CSVTMT_STACK_ELEM_STRING_VALUE:
+					func->column_name = top.obj.string_value.value;
+					break;
+				}
+			}
+		} break;
 		case CSVTMT_OP_STAR: {
 			stack_push_kind(CSVTMT_STACK_ELEM_STAR);
 		} break;
@@ -389,6 +424,8 @@ csvtmt_executor_exec(
 
 		case CSVTMT_OP_SELECT_STMT_BEG: {
 			// puts("select beg");
+			cur_context = CSVTMT_OP_SELECT_STMT_BEG;
+
 			if (model->mmap.fd == 0) {
 				model->table_name = op->obj.select_stmt.table_name;
 				model->column_names_len = 0;
@@ -436,6 +473,8 @@ csvtmt_executor_exec(
 		} break;
 		case CSVTMT_OP_SELECT_STMT_END: {
 			// puts("select end");
+			cur_context = CSVTMT_OP_SELECT_STMT_END;
+
 			if (model->skip) {
 				csvtmt_row_final(&model->row);
 				restore_save_index();
@@ -901,6 +940,10 @@ done:
 ret_row:
 	cleanup();
 	return CSVTMT_ROW;
+invalid_context:
+	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "invalid context");
+	cleanup();
+	return CSVTMT_ERROR;
 not_found_keys:
 	csvtmt_error_push(error, CSVTMT_ERR_EXEC, "not found keys");
 	cleanup();

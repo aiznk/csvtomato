@@ -131,7 +131,6 @@ typedef enum {
 	CSVTMT_ND_SHOW_STMT,
 	CSVTMT_ND_SHOW_TABLES_STMT,
 	CSVTMT_ND_FUNCTION,
-	CSVTMT_ND_COUNT_FUNC,
 	CSVTMT_ND_VALUES,
 	CSVTMT_ND_EXPR,
 	CSVTMT_ND_ASSIGN_EXPR,
@@ -359,7 +358,7 @@ struct CsvTomatoNode {
 		} create_table_stmt;
 		struct {
 			CsvTomatoFuncKind fn_kind;
-			struct CsvTomatoNode *column_name;
+			struct CsvTomatoNode *expr;
 		} function;
 		struct {
 			char *table_name;
@@ -392,6 +391,7 @@ struct CsvTomatoNode {
 			struct CsvTomatoNode *assign_expr;
 			struct CsvTomatoNode *number;
 			struct CsvTomatoNode *string;
+			struct CsvTomatoNode *function;
 			bool place_holder;
 		} expr;
 		struct {

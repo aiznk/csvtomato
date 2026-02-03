@@ -42,10 +42,7 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 	case CSVTMT_ND_NONE:
 		break;
 	case CSVTMT_ND_FUNCTION:
-		csvtmt_node_del_all(self->obj.function.count_func);
-		break;
-	case CSVTMT_ND_COUNT_FUNC:
-		csvtmt_node_del_all(self->obj.count_func.column_name);
+		csvtmt_node_del_all(self->obj.function.expr);
 		break;
 	case CSVTMT_ND_SHOW_STMT:
 		csvtmt_node_del_all(self->obj.show_stmt.show_tables_stmt);
@@ -83,10 +80,14 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 	case CSVTMT_ND_SELECT_STMT:
 		free(self->obj.select_stmt.table_name);
 
-		for (CsvTomatoNode *cur = self->obj.select_stmt.column_name_list; cur; ) {
-			CsvTomatoNode *rm = cur;
-			cur = cur->next;
-			csvtmt_node_del_all(rm);
+		if (self->obj.select_stmt.function) {
+			csvtmt_node_del_all(self->obj.select_stmt.function);
+		} else {
+			for (CsvTomatoNode *cur = self->obj.select_stmt.column_name_list; cur; ) {
+				CsvTomatoNode *rm = cur;
+				cur = cur->next;
+				csvtmt_node_del_all(rm);
+			}
 		}
 		csvtmt_node_del_all(self->obj.select_stmt.where_expr);
 		break;
@@ -130,6 +131,7 @@ csvtmt_node_del_all(CsvTomatoNode *self) {
 		csvtmt_node_del_all(self->obj.expr.assign_expr);
 		csvtmt_node_del_all(self->obj.expr.number);
 		csvtmt_node_del_all(self->obj.expr.string);
+		csvtmt_node_del_all(self->obj.expr.function);
 		break;
 	case CSVTMT_ND_ASSIGN_EXPR:
 		free(self->obj.assign_expr.ident);
@@ -855,6 +857,7 @@ not_found_end_paren:
 
 static CsvTomatoNode *
 parse_function(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error) {
+	CsvTomatoToken **save = token;
 	CsvTomatoNode *n1;
 
 	if (is_end(token)) {
@@ -881,13 +884,10 @@ parse_function(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *er
 		next(token);
 	}
 
-	// column_name (column_name contains '*')
-	n1->obj.function.column_name = parse_column_name(self, token, error);
-	if (!n1->obj.function.column_name) {
-		goto not_found_column_name;
-	}
+	// expr
+	n1->obj.function.expr = parse_expr(self, token, error);
 	if (error->error) {
-		goto failed_to_parse_column_name;
+		goto failed_to_parse_expr;
 	}
 
 	// )
@@ -899,7 +899,12 @@ parse_function(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *er
 
 	return n1;
 ret_null:
+	*token = *save;
 	csvtmt_node_del_all(n1);
+	return NULL;
+failed_to_parse_expr:
+	csvtmt_node_del_all(n1);
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "failed to parse expression on function");
 	return NULL;
 failed_to_allocate_node:
 	csvtmt_node_del_all(n1);
@@ -1281,6 +1286,15 @@ parse_expr(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error)
 	}
 	if (n2) {
 		n1->obj.expr.string = n2;
+		return n1;
+	}
+
+	n2 = parse_function(self, token, error);
+	if (error->error) {
+		goto fail;
+	}
+	if (n2) {
+		n1->obj.expr.function = n2;
 		return n1;
 	}
 
