@@ -121,6 +121,8 @@ push(
 	self->elems[self->len++] = elem;
 }
 
+static void opcode_function(CsvTomatoOpcode *self, CsvTomatoNode *node, CsvTomatoError *error);
+static void opcode_count_func(CsvTomatoOpcode *self, CsvTomatoNode *node, CsvTomatoError *error);
 static void opcode_sql_stmt_list(CsvTomatoOpcode *self, CsvTomatoNode *node, CsvTomatoError *error);
 static void opcode_sql_stmt(CsvTomatoOpcode *self, CsvTomatoNode *node, CsvTomatoError *error);
 static void opcode_create_table_stmt(CsvTomatoOpcode *self, CsvTomatoNode *node, CsvTomatoError *error);
@@ -215,6 +217,73 @@ opcode_create_table_stmt(
 }
 
 static void
+opcode_count_func(
+	CsvTomatoOpcode *self, 
+	CsvTomatoNode *node, 
+	CsvTomatoError *error
+) {
+	if (!node) {
+		return;
+	}
+
+	{
+		CsvTomatoOpcodeElem elem = {0};
+		elem.kind = CSVTMT_OP_COUNT_FUNC_BEG;
+		push(self, elem, error);
+		if (error->error) {
+			return;
+		}
+	}
+
+	opcode_column_name(self, node->obj.count_func.column_name, error);
+	if (error->error) {
+		goto failed_to_opcode_column_name;
+	}
+
+	{
+		CsvTomatoOpcodeElem elem = {0};
+		elem.kind = CSVTMT_OP_COUNT_FUNC_END;
+		push(self, elem, error);
+		if (error->error) {
+			return;
+		}
+	}
+
+	return;
+failed_to_opcode_column_name:
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "failed to parse column name for op-code");
+	return;
+}
+
+static void
+opcode_function(
+	CsvTomatoOpcode *self, 
+	CsvTomatoNode *node, 
+	CsvTomatoError *error
+) {
+	if (!node) {
+		return;
+	}
+
+	if (node->obj.function.count_func) {
+		opcode_count_func(self, node->obj.function.count_func, error);
+		if (error->error) {
+			goto failed_to_opcode_count_func;
+		}
+	} else {
+		goto invalid_state;
+	}
+
+	return;
+failed_to_opcode_count_func:
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "failed to parse count function for op-code");
+	return;
+invalid_state:
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "invalid state on function");
+	return;
+}
+
+static void
 opcode_select_stmt(
 	CsvTomatoOpcode *self, 
 	CsvTomatoNode *node, 
@@ -247,19 +316,25 @@ opcode_select_stmt(
 		}
 	}
 
-	opcode_column_name(self, node->obj.select_stmt.column_name_list, error);
-	if (error->error) {
-		return;
-	}
-
-	{
-		CsvTomatoOpcodeElem elem = {
-			.kind = CSVTMT_OP_COLUMN_NAMES_END,
-		};
-		push(self, elem, error);
+	if (node->obj.select_stmt.function) {
+		opcode_function(self, node->obj.select_stmt.function, error);
+	} else if (node->obj.select_stmt.column_name_list) {
+		opcode_column_name(self, node->obj.select_stmt.column_name_list, error);
 		if (error->error) {
 			return;
 		}
+
+		{
+			CsvTomatoOpcodeElem elem = {
+				.kind = CSVTMT_OP_COLUMN_NAMES_END,
+			};
+			push(self, elem, error);
+			if (error->error) {
+				return;
+			}
+		}
+	} else {
+		goto invalid_state;
 	}
 
 	if (node->obj.select_stmt.where_expr) {
@@ -298,6 +373,11 @@ opcode_select_stmt(
 			return;
 		}
 	}
+
+	return;
+invalid_state:
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "invalid state on select statement");
+	return;
 }
 
 static void

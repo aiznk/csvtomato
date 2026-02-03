@@ -916,6 +916,9 @@ failed_to_allocate_node:
 
 static CsvTomatoNode *
 parse_select_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error) {
+	if (is_end(token)) {
+		return NULL;
+	}
 	if (kind(token) != CSVTMT_TK_SELECT) {
 		return NULL;
 	}
