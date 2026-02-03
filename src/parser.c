@@ -827,37 +827,6 @@ parse_count_func(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *
 		goto failed_to_allocate_node;
 	}
 
-	// COUNT
-	if (kind(token) != CSVTMT_TK_COUNT) {
-		goto ret_null;
-	} else {
-		next(token);
-	}
-
-	// (
-	if (kind(token) != CSVTMT_TK_BEG_PAREN) {
-		goto not_found_beg_paren;
-	} else {
-		next(token);
-	}
-
-	// column_name or '*'
-	n1->obj.count_func.column_name = parse_column_name(self, token, error);
-	if (!n1->obj.count_func.column_name) {
-		goto not_found_column_name;
-	}
-	if (error->error) {
-		goto failed_to_parse_column_name;
-	}
-
-	// )
-	if (kind(token) != CSVTMT_TK_END_PAREN) {
-		goto not_found_end_paren;
-	} else {
-		next(token);
-	}
-
-	return n1;
 ret_null:
 	*token = *save;
 	csvtmt_node_del_all(n1);
@@ -886,7 +855,7 @@ not_found_end_paren:
 
 static CsvTomatoNode *
 parse_function(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error) {
-	CsvTomatoNode *n1, count_func;
+	CsvTomatoNode *n1;
 
 	if (is_end(token)) {
 		return NULL;
@@ -897,12 +866,36 @@ parse_function(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *er
 		goto failed_to_allocate_node;
 	}	
 
-	count_func = parse_count_func(self, token, error);
-	if (!count_func || error->error) {
+	// COUNT
+	if (kind(token) == CSVTMT_TK_COUNT) {
+		n1->obj.function.fn_kind = CSVTMT_FN_COUNT;
+	} else {
 		goto ret_null;
 	}
+	next(token);
 
-	n1->obj.function.count_func = count_func;
+	// (
+	if (kind(token) != CSVTMT_TK_BEG_PAREN) {
+		goto not_found_beg_paren;
+	} else {
+		next(token);
+	}
+
+	// column_name (column_name contains '*')
+	n1->obj.function.column_name = parse_column_name(self, token, error);
+	if (!n1->obj.function.column_name) {
+		goto not_found_column_name;
+	}
+	if (error->error) {
+		goto failed_to_parse_column_name;
+	}
+
+	// )
+	if (kind(token) != CSVTMT_TK_END_PAREN) {
+		goto not_found_end_paren;
+	} else {
+		next(token);
+	}
 
 	return n1;
 ret_null:
@@ -1144,6 +1137,7 @@ parse_column_name(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError 
 	return n1;
 fail:
 	csvtmt_node_del_all(n1);
+	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "invalid column name state");
 	return NULL;
 }
 

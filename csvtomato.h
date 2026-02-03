@@ -115,6 +115,11 @@ typedef enum {
 } CsvTomatoTokenKind;
 
 typedef enum {
+	CSVTMT_FN_NONE,
+	CSVTMT_FN_COUNT,
+} CsvTomatoFuncKind;
+
+typedef enum {
 	CSVTMT_ND_NONE,
 	CSVTMT_ND_STMT_LIST,
 	CSVTMT_ND_STMT,
@@ -146,8 +151,8 @@ typedef enum {
 	CSVTMT_OP_SELECT_STMT_END,
 	CSVTMT_OP_INSERT_STMT_BEG,
 	CSVTMT_OP_INSERT_STMT_END,
-	CSVTMT_OP_COUNT_FUNC_BEG,
-	CSVTMT_OP_COUNT_FUNC_END,
+	CSVTMT_OP_FUNC_BEG,
+	CSVTMT_OP_FUNC_END,
 	CSVTMT_OP_UPDATE_STMT_BEG,
 	CSVTMT_OP_UPDATE_STMT_END,
 	CSVTMT_OP_UPDATE_SET_BEG,
@@ -353,11 +358,9 @@ struct CsvTomatoNode {
 			bool if_not_exists;
 		} create_table_stmt;
 		struct {
-			struct CsvTomatoNode *count_func;
-		} function;
-		struct {
+			CsvTomatoFuncKind fn_kind;
 			struct CsvTomatoNode *column_name;
-		} count_func;
+		} function;
 		struct {
 			char *table_name;
 			struct CsvTomatoNode *column_name_list;
@@ -432,6 +435,7 @@ struct CsvTomatoOpcode {
 struct CsvTomatoOpcodeElem {
 	CsvTomatoOpcodeKind kind;
 	CsvTomatoOpcodeKind old_kind;
+	CsvTomatoFuncKind fn_kind;
 	union {
 		struct {
 			char *table_name;

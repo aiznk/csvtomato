@@ -217,7 +217,7 @@ opcode_create_table_stmt(
 }
 
 static void
-opcode_count_func(
+opcode_function(
 	CsvTomatoOpcode *self, 
 	CsvTomatoNode *node, 
 	CsvTomatoError *error
@@ -228,7 +228,8 @@ opcode_count_func(
 
 	{
 		CsvTomatoOpcodeElem elem = {0};
-		elem.kind = CSVTMT_OP_COUNT_FUNC_BEG;
+		elem.kind = CSVTMT_OP_FUNC_BEG;
+		elem.fn_kind = node->obj.function.fn_kind;
 		push(self, elem, error);
 		if (error->error) {
 			return;
@@ -242,7 +243,7 @@ opcode_count_func(
 
 	{
 		CsvTomatoOpcodeElem elem = {0};
-		elem.kind = CSVTMT_OP_COUNT_FUNC_END;
+		elem.kind = CSVTMT_OP_FUNC_END;
 		push(self, elem, error);
 		if (error->error) {
 			return;
@@ -252,34 +253,6 @@ opcode_count_func(
 	return;
 failed_to_opcode_column_name:
 	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "failed to parse column name for op-code");
-	return;
-}
-
-static void
-opcode_function(
-	CsvTomatoOpcode *self, 
-	CsvTomatoNode *node, 
-	CsvTomatoError *error
-) {
-	if (!node) {
-		return;
-	}
-
-	if (node->obj.function.count_func) {
-		opcode_count_func(self, node->obj.function.count_func, error);
-		if (error->error) {
-			goto failed_to_opcode_count_func;
-		}
-	} else {
-		goto invalid_state;
-	}
-
-	return;
-failed_to_opcode_count_func:
-	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "failed to parse count function for op-code");
-	return;
-invalid_state:
-	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "invalid state on function");
 	return;
 }
 
