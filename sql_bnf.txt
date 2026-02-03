@@ -1,7 +1,7 @@
 SQL BNF
 
 sql_stmt_list ::= 
-	[ sql_stmt ] ( ';' [ sql_stmt ] ) *
+	sql_stmt ( ';' [ sql_stmt ] ) *
 
 sql_stmt ::= 
 	create_table_stmt |
@@ -30,11 +30,11 @@ column_constraint ::=
 	( PRIMARY KEY [ AUTOINCREMENT ] | NOT NULL 
 
 select_stmt ::=
-	SELECT [ ( column_name ( ',' column_name ) ) * ] 
+	SELECT ( column_name ( ',' column_name ) ) * 
 		FROM table_name [ WHERE expr ]
 
 insert_stmt ::=
-	INSERT INTO table_name [ '(' column_name ( ',' column_name ) * ')' ]  [ VALUES ( values ) * ]
+	INSERT INTO table_name '(' column_name ( ',' column_name ) * ')'  VALUES ( values ) *
 
 update_stmt ::= 
 	UPDATE table_name SET assign_expr ( ',' assign_expr ) * [ WHERE expr ]
