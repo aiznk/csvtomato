@@ -927,36 +927,27 @@ parse_select_stmt(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError 
 		goto failed_to_allocate_node;
 	}
 
-	CsvTomatoNode *function = parse_function(self, token, error);
-	if (error->error) {
-		goto failed_to_parse_function;
+	CsvTomatoNode *expr_list = parse_expr(self, token, error);
+	if (error->error || !expr_list) {
+		goto failed_to_parse_expr_list;
 	}
 
-	if (function) {
-		n1->obj.select_stmt.function = function;
-	} else {
-		CsvTomatoNode *column_name_list = parse_column_name(self, token, error);
-		if (error->error || !column_name_list) {
-			goto failed_to_parse_column_name;
+	for (; !is_end(token); ) {
+		if (kind(token) != CSVTMT_TK_COMMA) {
+			break;
+		}
+		next(token);
+
+		CsvTomatoNode *expr = parse_expr(self, token, error);
+		if (error->error || !expr) {
+			csvtmt_node_del_all(expr_list);
+			goto failed_to_parse_expr_list;
 		}
 
-		for (; !is_end(token); ) {
-			if (kind(token) != CSVTMT_TK_COMMA) {
-				break;
-			}
-			next(token);
-
-			CsvTomatoNode *column_name = parse_column_name(self, token, error);
-			if (error->error || !column_name) {
-				csvtmt_node_del_all(column_name_list);
-				goto failed_to_parse_column_name;
-			}
-
-			node_push(column_name_list, column_name);
-		}
-
-		n1->obj.select_stmt.column_name_list = column_name_list;
+		node_push(expr_list, expr);
 	}
+
+	n1->obj.select_stmt.expr_list = expr_list;
 
 	if (kind(token) != CSVTMT_TK_FROM) {
 		goto not_found_from;
@@ -1000,7 +991,7 @@ not_found_from:
 failed_to_allocate_node:
 	csvtmt_error_push(error, CSVTMT_ERR_MEM, "failed to allocate node on select statement");
 	return NULL;
-failed_to_parse_column_name:
+failed_to_parse_expr_list:
 	csvtmt_error_push(error, CSVTMT_ERR_SYNTAX, "failed to parse column name on select statement");
 	return NULL;
 not_found_table_name:
@@ -1295,6 +1286,15 @@ parse_expr(CsvTomatoParser *self, CsvTomatoToken **token, CsvTomatoError *error)
 	}
 	if (n2) {
 		n1->obj.expr.function = n2;
+		return n1;
+	}
+
+	n2 = parse_column_name(self, token, error);
+	if (error->error) {
+		goto fail;
+	}
+	if (n2) {
+		n1->obj.expr.column_name = n2;
 		return n1;
 	}
 

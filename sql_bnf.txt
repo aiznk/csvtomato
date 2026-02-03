@@ -64,6 +64,7 @@ expr ::=
 	digit |
 	string |
 	place_holder |
+	column_name |
 	function
 
 assign_expr ::=

@@ -362,7 +362,7 @@ struct CsvTomatoNode {
 		} function;
 		struct {
 			char *table_name;
-			struct CsvTomatoNode *column_name_list;
+			struct CsvTomatoNode *expr_list;
 			struct CsvTomatoNode *function;
 			struct CsvTomatoNode *where_expr;
 		} select_stmt;
@@ -392,6 +392,7 @@ struct CsvTomatoNode {
 			struct CsvTomatoNode *number;
 			struct CsvTomatoNode *string;
 			struct CsvTomatoNode *function;
+			struct CsvTomatoNode *column_name;
 			bool place_holder;
 		} expr;
 		struct {

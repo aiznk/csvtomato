@@ -1,0 +1,152 @@
+# Execute plan
+
+## Node
+
+* ProjectNode ... 列の切り出しを行う。
+* FilterNode ... 行のフィルタリングを行う。
+* ScanNode ... 行を1行取得する。
+* AggregateNode ... 合計、集計をする
+
+## SELECT文
+
+### SQL
+
+	SELECT COUNT(*) FROM mytab WHERE x > 10;
+
+### AST
+
+	select_stmt:
+		- expr_list
+		- table_name
+		- where_expr
+
+### ExecuteTree
+
+	AggregateNode(COUNT(*) ... expr_list)
+		- FilterNode(where_expr)
+			- ScanNode(table_name)
+
+### OpCode
+
+	init agreegate
+	loop:
+	scan_op:
+		1行取得(from table_name)
+		if 取得する行がない {
+			goto end
+		}
+	filter_op: 
+		取得した行をフィルタ(where_expr)
+		if 行が一致しない {
+			goto loop
+		}
+	aggregate_op: 
+		行を集計(COUNT++)
+		goto loop
+	end:
+
+ScanNodeでテーブルの行データを得る。
+FilterNodeで行データをフィルターする。
+AggregateNodeでフィルターした行データを合計する（COUNTを使っていれば）。
+あるいはProjectNodeでフィルターした行データをそのまま出力する。
+
+## INSERT文
+
+	INSERT INTO mytab (age, name) VALUES (20, "Taro");
+
+### AST
+
+	insert_stmt:
+		- table_name
+		- column_name_list 
+		- values_list
+
+### ExecuteTree
+
+	InsertNode(mytab)
+		- ColumnsNode(column_name_list)
+			- ValuesNode(values_list)
+
+### OpCode
+
+	loop:
+	values_op: 
+		値をスタックに積む
+	columns_op:
+		スタックに積まれた値と列名を対応付け
+	insert_op:
+		スタックから値を取ってテーブルに挿入
+	end:
+
+## UPDATE文
+
+### SQL
+
+	UPDATE mytab SET age = 30, name = "Taro" WHERE age > 20;
+
+### AST
+
+	update_stmt:
+		- table_name
+		- expr_list
+		- where_expr
+
+### ExecuteTree
+
+	UpdateNode(table_name)
+		- SetNode(expr_list)
+			- FilterNode(where_expr)
+				- ScanNode(table_name)
+### OpCode
+
+	loop:
+	scan_op: 
+		1行取得
+		if 取得する行がない {
+			goto end
+		}
+	filter_op: 
+		"age > 20" でフィルタ
+		if 一致しない {
+			goto update_op
+		}
+	set_op: 
+		列に値をセット（age = 30, name = "Taro"）
+	update_op: 
+		1行書き込み
+		goto loop
+	end:
+
+## DELETE文
+
+### SQL
+
+	DELETE FROM mytab WHERE id < 10;
+
+### AST
+
+	delete_stmt:
+		- table_name
+		- where_expr
+
+### ExecuteTree
+
+	DeleteNode
+		- FilterNode(where_expr)
+			- ScanNode(table_name)
+
+### OpCode
+
+	loop:
+	scan_op:
+		1行取得
+		if 行がなければ {
+			goto end
+		}
+	filter_op:
+		if 一致していなければ {
+			goto loop
+		}
+	delete_op:
+		__MODE__列をDELETEにする
+	end:

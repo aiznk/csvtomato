@@ -131,6 +131,14 @@ csvtmt_executor_exec(
 		case CSVTMT_OP_FUNC_BEG:
 			break;
 		case CSVTMT_OP_FUNC_END: {
+			/*
+				SELECT COUNT(*) FROM mytab;
+
+				は、行数を返す。COUNT(*)した段階では、
+				SELECT文の行数取得は動いていない。
+				つまり関数の文脈に入った段階では行数は取得できない。
+				なにか簡単な方法はないか？
+			 */
 			CsvTomatoStackElem top;
 			stack_pop(top);
 
@@ -421,7 +429,6 @@ csvtmt_executor_exec(
 				}
 			}
 		} break;
-
 		case CSVTMT_OP_SELECT_STMT_BEG: {
 			// puts("select beg");
 			cur_context = CSVTMT_OP_SELECT_STMT_BEG;
